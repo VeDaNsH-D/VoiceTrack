@@ -4,10 +4,10 @@ import { AnalyticsModal } from './AnalyticsModal'
 
 interface DashboardMainProps {
   userName: string
-  onNavigate: (view: 'landing' | 'auth' | 'voice' | 'dashboard' | 'history') => void
+  onToggleSidebar: () => void
 }
 
-export const DashboardMain: React.FC<DashboardMainProps> = ({ userName, onNavigate }) => {
+export const DashboardMain: React.FC<DashboardMainProps> = ({ userName, onToggleSidebar }) => {
   const [displayBalance, setDisplayBalance] = useState(0)
   const [showAnalytics, setShowAnalytics] = useState(false)
   const finalBalance = 14857.05
@@ -58,12 +58,13 @@ export const DashboardMain: React.FC<DashboardMainProps> = ({ userName, onNaviga
         {/* Top Handle to Close Dashboard overlay */}
         <motion.div variants={itemVariants} className="mb-6 flex justify-start mt-4">
           <button 
-            onClick={() => onNavigate('voice')}
+            onClick={onToggleSidebar}
             className="w-10 h-10 bg-white bg-opacity-60 rounded-full flex items-center justify-center hover:bg-opacity-100 transition-colors shadow-sm"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
             </svg>
           </button>
         </motion.div>
