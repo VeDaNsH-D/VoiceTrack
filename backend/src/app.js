@@ -5,6 +5,7 @@ const authRoutes = require("./routes/auth.routes");
 const webhookRoutes = require("./routes/webhook.routes");
 const transactionRoutes = require("./routes/transaction.routes");
 const insightsRoutes = require("./routes/insights.routes");
+const chatRoutes = require("./routes/chat");
 const errorMiddleware = require("./middlewares/error.middleware");
 const authMiddleware = require("./middlewares/auth.middleware");
 
@@ -23,6 +24,7 @@ app.get("/", (req, res) => {
     service: "voicetrack-backend",
     endpoints: {
       health: "GET /health",
+      chat: "POST /chat",
       processText: "POST /process-text",
       processTextScoped: "POST /api/transactions/process-text",
     },
@@ -33,6 +35,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/webhooks", webhookRoutes);
 app.use("/api/transactions", transactionRoutes);
 app.use("/api/insights", insightsRoutes);
+app.use("/", chatRoutes);
 
 app.get("/api/protected", authMiddleware, (req, res) => {
   res.status(200).json({
