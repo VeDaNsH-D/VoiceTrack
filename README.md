@@ -14,3 +14,33 @@ The React Compiler is not enabled on this template because of its impact on dev 
 ## Expanding the ESLint configuration
 
 If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+# VoiceTrack ML Service
+
+## Setup
+
+1. Install dependencies:
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. Run the server:
+
+   ```bash
+   uvicorn app.main:app --reload
+   ```
+
+## Endpoints
+
+- `GET /health` — Health check
+- `POST /stt` — Speech-to-text (audio upload)
+- `POST /process` — Placeholder for text processing
+
+## Folder Structure
+
+- `app/`
+  - `main.py` — FastAPI app entrypoint
+  - `routes/` — API route handlers
+  - `services/` — ML and business logic
+  - `utils/` — Utilities (logging, etc.)
+  - `temp_audio/` — Temporary audio file storage
