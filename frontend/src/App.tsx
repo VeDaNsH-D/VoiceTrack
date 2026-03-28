@@ -7,19 +7,57 @@ import { DashboardMain } from './components/DashboardMain'
 import { AIVoiceScreen } from './components/AIVoiceScreen'
 import { Chatbot } from './components/Chatbot'
 import { Sidebar } from './components/Sidebar'
+import { setAuthToken } from './services/api'
 import './App.css'
 import './index.css'
 
 export type ViewState = 'landing' | 'auth' | 'voice' | 'dashboard' | 'history' | 'chat'
 
+export interface AuthSession {
+  userId: string
+  name: string
+  occupation: string
+  token: string
+  identifier: string
+}
+
+function getSavedSession(): AuthSession | null {
+  const saved = localStorage.getItem('voicetrack.session')
+  if (!saved) {
+    return null
+  }
+
+  try {
+    return JSON.parse(saved) as AuthSession
+  } catch {
+    localStorage.removeItem('voicetrack.session')
+    return null
+  }
+}
+
 export function App() {
-  const [currentView, setCurrentView] = useState<ViewState>('landing')
+  const [session, setSession] = useState<AuthSession | null>(() => {
+    const restored = getSavedSession()
+    if (restored?.token) {
+      setAuthToken(restored.token)
+    }
+    return restored
+  })
+  const [currentView, setCurrentView] = useState<ViewState>(() => (getSavedSession() ? 'voice' : 'landing'))
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false)
   const [language, setLanguage] = useState<'EN' | 'HI'>('EN')
-  const [userName, setUserName] = useState<string>('')
-  const [userOccupation, setUserOccupation] = useState<string>('')
+  const [userName, setUserName] = useState<string>(() => getSavedSession()?.name || '')
+  const [userOccupation, setUserOccupation] = useState<string>(() => getSavedSession()?.occupation || '')
 
   const handleNavigate = (view: ViewState) => {
+    if (view === 'landing') {
+      setSession(null)
+      setUserName('')
+      setUserOccupation('')
+      setAuthToken(null)
+      localStorage.removeItem('voicetrack.session')
+    }
+
     setCurrentView(view)
     setIsSidebarOpen(false)
   }
@@ -32,15 +70,26 @@ export function App() {
     setLanguage(prev => prev === 'EN' ? 'HI' : 'EN')
   }
 
-  const handleLogin = (name: string, occupation: string) => {
-    setUserName(name)
-    setUserOccupation(occupation)
+  const handleLogin = (authSession: AuthSession) => {
+    setSession(authSession)
+    setUserName(authSession.name)
+    setUserOccupation(authSession.occupation)
+    setAuthToken(authSession.token)
+    localStorage.setItem('voicetrack.session', JSON.stringify(authSession))
     setCurrentView('voice')
   }
 
   const handleDemo = () => {
+    setAuthToken(null)
     setUserName('Guest')
     setUserOccupation('Tester')
+    setSession({
+      userId: 'demo-user',
+      name: 'Guest',
+      occupation: 'Tester',
+      token: '',
+      identifier: 'demo-user',
+    })
     setCurrentView('voice')
   }
 
@@ -92,7 +141,7 @@ export function App() {
             exit={{ opacity: 0 }}
             className="flex-1 overflow-y-auto"
           >
-            <DashboardMain userName={userName} onToggleSidebar={toggleSidebar} language={language} />
+            <DashboardMain userId={session?.userId || ''} userName={userName} userOccupation={userOccupation} onToggleSidebar={toggleSidebar} language={language} />
           </motion.div>
         )}
 
@@ -104,7 +153,7 @@ export function App() {
             exit={{ opacity: 0 }}
             className="flex-1 overflow-hidden h-full relative"
           >
-            <AIVoiceScreen userName={userName} onToggleSidebar={toggleSidebar} language={language} />
+            <AIVoiceScreen userId={session?.userId || ''} userName={userName} onToggleSidebar={toggleSidebar} language={language} />
           </motion.div>
         )}
 
@@ -116,7 +165,7 @@ export function App() {
             exit={{ opacity: 0 }}
             className="flex-1 overflow-hidden h-full relative"
           >
-            <History onToggleSidebar={toggleSidebar} language={language} />
+            <History userId={session?.userId || ''} onToggleSidebar={toggleSidebar} language={language} />
           </motion.div>
         )}
 
@@ -128,7 +177,7 @@ export function App() {
             exit={{ opacity: 0 }}
             className="flex-1 overflow-hidden h-full relative"
           >
-            <Chatbot onToggleSidebar={toggleSidebar} language={language} />
+            <Chatbot userId={session?.userId || ''} onToggleSidebar={toggleSidebar} language={language} />
           </motion.div>
         )}
       </AnimatePresence>

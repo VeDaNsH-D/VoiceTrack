@@ -1,46 +1,75 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
+import { askAssistant } from '../services/api'
 
 interface ChatbotProps {
+  userId: string
   onToggleSidebar: () => void
   language: 'EN' | 'HI'
 }
 
-export const Chatbot: React.FC<ChatbotProps> = ({ onToggleSidebar, language }) => {
+type ChatMessage = {
+  id: number
+  sender: 'ai' | 'user'
+  text: string
+}
+
+export const Chatbot: React.FC<ChatbotProps> = ({ userId, onToggleSidebar, language }) => {
   const [inputText, setInputText] = useState('')
-  const [messages, setMessages] = useState([
+  const [messages, setMessages] = useState<ChatMessage[]>([
     { id: 1, sender: 'ai', text: language === 'EN' ? 'Hi! I am your VoiceTrace business assistant. I know all your past transactions. What would you like to know today?' : 'नमस्ते! मैं आपका VoiceTrace बिजनेस असिस्टेंट हूँ। मैं आपके पिछले सभी लेन-देन जानता हूँ। आज आप क्या जानना चाहेंगे?' },
-    { id: 2, sender: 'user', text: language === 'EN' ? 'How much did I spend on transport this week?' : 'मैंने इस सप्ताह परिवहन पर कितना खर्च किया?' },
-    { id: 3, sender: 'ai', text: language === 'EN' ? 'Based on your voice records from Tuesday and Thursday, you spent ₹200 and ₹150 on transport, totaling ₹350 this week.' : 'मंगलवार और गुरुवार के आपके वॉयस रिकॉर्ड के आधार पर, आपने परिवहन पर ₹200 और ₹150 खर्च किए, जो इस सप्ताह कुल ₹350 है।' },
   ])
+  const [isSending, setIsSending] = useState(false)
 
   // Update messages completely if language changes (mock hot reload)
   React.useEffect(() => {
     setMessages([
       { id: 1, sender: 'ai', text: language === 'EN' ? 'Hi! I am your VoiceTrace business assistant. I know all your past transactions. What would you like to know today?' : 'नमस्ते! मैं आपका VoiceTrace बिजनेस असिस्टेंट हूँ। मैं आपके पिछले सभी लेन-देन जानता हूँ। आज आप क्या जानना चाहेंगे?' },
-      { id: 2, sender: 'user', text: language === 'EN' ? 'How much did I spend on transport this week?' : 'मैंने इस सप्ताह परिवहन पर कितना खर्च किया?' },
-      { id: 3, sender: 'ai', text: language === 'EN' ? 'Based on your voice records from Tuesday and Thursday, you spent ₹200 and ₹150 on transport, totaling ₹350 this week.' : 'मंगलवार और गुरुवार के आपके वॉयस रिकॉर्ड के आधार पर, आपने परिवहन पर ₹200 और ₹150 खर्च किए, जो इस सप्ताह कुल ₹350 है।' },
     ])
   }, [language])
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!inputText.trim()) return
+    if (isSending) return
     
     // Add user message
     const newMessages = [...messages, { id: Date.now(), sender: 'user', text: inputText }]
     setMessages(newMessages)
+    const messageToSend = inputText
     setInputText('')
+    setIsSending(true)
 
-    // Mock AI RAG Response
-    setTimeout(() => {
-      setMessages(prev => [...prev, { 
-        id: Date.now() + 1, 
-        sender: 'ai', 
-        text: language === 'EN' 
-          ? 'Analyzing your ledger... Based on recent data, I recommend stocking 20% more apples tomorrow to match expected demand!'
-          : 'आपके लेजर का विश्लेषण किया जा रहा है... हाल के डेटा के आधार पर, मैं अपेक्षित मांग से मेल खाने के लिए कल 20% अधिक सेब स्टॉक करने की सलाह देता हूँ!'
-      }])
-    }, 1200)
+    try {
+      const response = await askAssistant({
+        userId: userId || 'guest-user',
+        message: messageToSend,
+      })
+
+      const groundedReply = response.clarificationQuestion || response.reply
+
+      setMessages(prev => [
+        ...prev,
+        {
+          id: Date.now() + 1,
+          sender: 'ai',
+          text: groundedReply,
+        },
+      ])
+    } catch {
+      setMessages(prev => [
+        ...prev,
+        {
+          id: Date.now() + 1,
+          sender: 'ai',
+          text:
+            language === 'EN'
+              ? 'I could not reach the backend right now. Please try once more.'
+              : 'मैं अभी बैकएंड तक नहीं पहुंच सका। कृपया फिर से प्रयास करें।',
+        },
+      ])
+    } finally {
+      setIsSending(false)
+    }
   }
 
   return (
@@ -109,7 +138,8 @@ export const Chatbot: React.FC<ChatbotProps> = ({ onToggleSidebar, language }) =
           />
           <button 
             onClick={handleSend}
-            className="w-12 h-12 bg-[#1A1A1A] rounded-full flex items-center justify-center hover:scale-105 transition-transform flex-shrink-0 shadow-md"
+            disabled={isSending}
+            className="w-12 h-12 bg-[#1A1A1A] rounded-full flex items-center justify-center hover:scale-105 transition-transform flex-shrink-0 shadow-md disabled:opacity-60"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F8F5F2" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <line x1="22" y1="2" x2="11" y2="13"></line>

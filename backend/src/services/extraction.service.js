@@ -157,6 +157,12 @@ function reconcileExplicitPrices(text, data) {
 function detectAmbiguity(text, data) {
   const language = detectResponseLanguage(text);
   const hasData = (data.sales?.length || 0) + (data.expenses?.length || 0) > 0;
+  const normalizedText = String(text || "").toLowerCase();
+  const mentionsSale = /\b(becha|bika|biki|sold|sale|sales|bikri)\b/i.test(normalizedText);
+  const mentionsExpense = /\b(kharida|kharidi|expense|kharcha|paid|pay|rent|transport|cost)\b/i.test(normalizedText);
+  const hasSales = (data.sales?.length || 0) > 0;
+  const hasExpenses = (data.expenses?.length || 0) > 0;
+  const suspiciousNumbers = /\b\d{4,}\s*hazar\b/i.test(normalizedText);
 
   if (!hasData) {
     return {
@@ -172,6 +178,13 @@ function detectAmbiguity(text, data) {
         data.meta.clarification_question,
         language
       ),
+    };
+  }
+
+  if ((mentionsSale && !hasSales) || (mentionsExpense && !hasExpenses) || suspiciousNumbers) {
+    return {
+      ambiguous: true,
+      clarification_question: getClarificationMessage(language),
     };
   }
 

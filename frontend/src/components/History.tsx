@@ -1,40 +1,92 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { getTransactionHistory, type HistoryEntry } from '../services/api'
 
 interface HistoryProps {
+  userId: string
   onToggleSidebar: () => void
   language: 'EN' | 'HI'
 }
 
 type Period = 'Today' | 'This Week' | 'This Month' | 'Custom'
-type PeriodHI = 'आज' | 'इस सप्ताह' | 'इस महीने' | 'कस्टम'
 
-export const History: React.FC<HistoryProps> = ({ onToggleSidebar, language }) => {
+export const History: React.FC<HistoryProps> = ({ userId, onToggleSidebar, language }) => {
   const [activePeriod, setActivePeriod] = useState<Period>('Today')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
+  const [records, setRecords] = useState<HistoryEntry[]>([])
+  const [isLoading, setIsLoading] = useState(false)
 
-  // Mock data for history based on vendor voice records
-  const allHistoryData = [
-    { id: 1, date: 'Today, 2:30 PM', period: 'Today', text: 'Sold 5 dozen bananas and spent ₹200 on transport.', revenue: 300, expense: 200 },
-    { id: 2, date: 'Today, 10:00 AM', period: 'Today', text: 'Morning stock arrived. Paid ₹500 advance.', revenue: 0, expense: 500 },
-    { id: 3, date: 'Yesterday, 6:00 PM', period: 'This Week', text: 'Good day. Sold all apples for ₹800. No expenses.', revenue: 800, expense: 0 },
-    { id: 4, date: 'Monday, 4:15 PM', period: 'This Week', text: 'Paid rent ₹500 and sold mixed fruits worth ₹1200.', revenue: 1200, expense: 500 },
-    { id: 5, date: 'Mar 15, 8:00 PM', period: 'This Month', text: 'Big event nearby. Handled ₹2500 in sales, paid helpers ₹400.', revenue: 2500, expense: 400 },
-    { id: 6, date: 'Mar 10, 1:00 PM', period: 'This Month', text: 'Rain disrupted evening. Sales ₹600.', revenue: 600, expense: 0 },
-  ]
+  React.useEffect(() => {
+    let mounted = true
 
-  const filteredData = allHistoryData.filter(item => {
-    if (activePeriod === 'Today') return item.period === 'Today'
-    if (activePeriod === 'This Week') return item.period === 'Today' || item.period === 'This Week'
-    if (activePeriod === 'This Month') return true
-    // If Custom, filter by simple string inclusion or logic. We mock it showing items that fall inside bounds.
-    if (activePeriod === 'Custom') {
-      if (!startDate || !endDate) return false // Require both to show
-      return true // For mockup, showing all when custom range is populated.
+    const loadHistory = async () => {
+      setIsLoading(true)
+      try {
+        const response = await getTransactionHistory({
+          userId: userId || undefined,
+          limit: 200,
+        })
+
+        if (mounted) {
+          setRecords(response.transactions)
+        }
+      } catch {
+        if (mounted) {
+          setRecords([])
+        }
+      } finally {
+        if (mounted) {
+          setIsLoading(false)
+        }
+      }
     }
-    return true
-  })
+
+    loadHistory()
+
+    return () => {
+      mounted = false
+    }
+  }, [userId])
+
+  const filteredData = useMemo(() => {
+    const now = new Date()
+    const todayStart = new Date(now)
+    todayStart.setHours(0, 0, 0, 0)
+    const weekStart = new Date(now)
+    weekStart.setDate(now.getDate() - 7)
+    weekStart.setHours(0, 0, 0, 0)
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+
+    return records.filter((item) => {
+      const createdAt = new Date(item.createdAt)
+
+      if (activePeriod === 'Today') {
+        return createdAt >= todayStart
+      }
+
+      if (activePeriod === 'This Week') {
+        return createdAt >= weekStart
+      }
+
+      if (activePeriod === 'This Month') {
+        return createdAt >= monthStart
+      }
+
+      if (activePeriod === 'Custom') {
+        if (!startDate || !endDate) {
+          return false
+        }
+
+        const from = new Date(startDate)
+        const to = new Date(endDate)
+        to.setHours(23, 59, 59, 999)
+        return createdAt >= from && createdAt <= to
+      }
+
+      return true
+    })
+  }, [records, activePeriod, startDate, endDate])
 
   return (
     <motion.div
@@ -133,6 +185,13 @@ export const History: React.FC<HistoryProps> = ({ onToggleSidebar, language }) =
               <div className="flex h-40 items-center justify-center text-[#1A1A1A]/50 font-medium text-sm text-center px-8">
                 {language === 'EN' ? 'Select a date range to view records.' : 'रिकॉर्ड देखने के लिए तिथि सीमा चुनें।'}
               </div>
+            ) : isLoading ? (
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="text-center py-10 opacity-60 text-sm font-medium"
+              >
+                {language === 'EN' ? 'Loading records...' : 'रिकॉर्ड लोड हो रहे हैं...'}
+              </motion.div>
             ) : filteredData.length === 0 ? (
                <motion.div 
                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -144,7 +203,7 @@ export const History: React.FC<HistoryProps> = ({ onToggleSidebar, language }) =
               filteredData.map((item, idx) => (
                 <motion.div 
                   layout
-                  key={item.id}
+                  key={item.id || String(idx)}
                   initial={{ opacity: 0, scale: 0.95, y: 10 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95, y: -10 }}
@@ -152,16 +211,21 @@ export const History: React.FC<HistoryProps> = ({ onToggleSidebar, language }) =
                   className="glass-card p-5"
                 >
                   <div className="flex justify-between items-start mb-3">
-                    <span className="text-[11px] font-bold text-[#1A1A1A] opacity-50 tracking-wide uppercase">{item.date}</span>
+                    <span className="text-[11px] font-bold text-[#1A1A1A] opacity-50 tracking-wide uppercase">
+                      {new Date(item.createdAt).toLocaleString(language === 'EN' ? 'en-IN' : 'hi-IN', {
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                      })}
+                    </span>
                     <div className="flex gap-2">
-                      <span className="text-xs font-semibold text-[#8A9B80] bg-[#8A9B80] bg-opacity-20 px-2 py-1 rounded">+₹{item.revenue}</span>
-                      {item.expense > 0 && (
-                        <span className="text-xs font-semibold text-[#F85F54] bg-[#F85F54] bg-opacity-10 px-2 py-1 rounded">-₹{item.expense}</span>
+                      <span className="text-xs font-semibold text-[#8A9B80] bg-[#8A9B80] bg-opacity-20 px-2 py-1 rounded">+₹{Math.round(item.totals.salesAmount || 0)}</span>
+                      {(item.totals.expenseAmount || 0) > 0 && (
+                        <span className="text-xs font-semibold text-[#F85F54] bg-[#F85F54] bg-opacity-10 px-2 py-1 rounded">-₹{Math.round(item.totals.expenseAmount || 0)}</span>
                       )}
                     </div>
                   </div>
                   <p className="text-sm font-medium text-[#1A1A1A] leading-relaxed">
-                    "{item.text}"
+                    {item.rawText}
                   </p>
                 </motion.div>
               ))

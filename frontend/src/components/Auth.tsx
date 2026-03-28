@@ -1,8 +1,11 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import axios from 'axios'
+import { loginUser, signupUser } from '../services/api'
+import type { AuthSession } from '../App'
 
 interface AuthProps {
-  onLogin: (name: string, occupation: string) => void
+  onLogin: (session: AuthSession) => void
   onBack: () => void
   language: 'EN' | 'HI'
 }
@@ -15,10 +18,13 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onBack, language }) => {
   const [otp, setOtp] = useState('')
   const [name, setName] = useState('')
   const [occupation, setOccupation] = useState('')
+  const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState('')
 
   const handlePhoneSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    setError('')
     if (phone.length >= 10) {
       setIsLoading(true)
       setTimeout(() => {
@@ -30,6 +36,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onBack, language }) => {
 
   const handleOtpSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    setError('')
     if (otp.length === 4) {
       setIsLoading(true)
       setTimeout(() => {
@@ -39,10 +46,58 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onBack, language }) => {
     }
   }
 
-  const handleDetailsSubmit = (e: React.FormEvent) => {
+  const handleDetailsSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (name.trim() && occupation.trim()) {
-      onLogin(name.trim(), occupation.trim())
+    setError('')
+
+    if (!name.trim() || !occupation.trim() || password.length < 6) {
+      setError(language === 'EN' ? 'Please fill all fields with a valid password.' : 'कृपया सभी फ़ील्ड भरें और सही पासवर्ड दें।')
+      return
+    }
+
+    const identifier = `+91${phone}`
+
+    setIsLoading(true)
+
+    try {
+      let authResult
+
+      try {
+        authResult = await signupUser({
+          name: name.trim(),
+          phone: identifier,
+          password,
+        })
+      } catch (signupError: unknown) {
+        const status = axios.isAxiosError(signupError) ? signupError.response?.status : undefined
+        if (status === 409) {
+          authResult = await loginUser({
+            identifier,
+            password,
+          })
+        } else {
+          throw signupError
+        }
+      }
+
+      onLogin({
+        userId: authResult.user._id,
+        name: authResult.user.name || name.trim(),
+        occupation: occupation.trim(),
+        token: authResult.token,
+        identifier,
+      })
+    } catch (apiError: unknown) {
+      const isNetworkIssue = axios.isAxiosError(apiError) && !apiError.response
+      const message = isNetworkIssue
+        ? (language === 'EN'
+            ? 'Cannot reach backend server. Start backend on http://localhost:5001 and try again.'
+            : 'बैकएंड सर्वर तक पहुंच नहीं हो रही। कृपया backend को http://localhost:5001 पर चलाकर फिर प्रयास करें।')
+        : ((axios.isAxiosError(apiError) ? apiError.response?.data?.message : undefined) ||
+          (language === 'EN' ? 'Authentication failed. Please try again.' : 'ऑथेंटिकेशन असफल हुआ। कृपया दोबारा कोशिश करें।'))
+      setError(String(message))
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -219,14 +274,33 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onBack, language }) => {
                   />
                 </div>
 
+                <div className="glass-card p-4">
+                  <p className="text-xs font-semibold text-[#1A1A1A] opacity-60 mb-1 uppercase tracking-wider">
+                    {language === 'EN' ? 'Password (min 6 chars)' : 'पासवर्ड (कम से कम 6 अक्षर)'}
+                  </p>
+                  <input
+                    type="password"
+                    placeholder="******"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="bg-transparent border-none outline-none w-full text-[#1A1A1A] placeholder:text-[#1A1A1A] placeholder:opacity-30 font-medium"
+                  />
+                </div>
+
+                {error && (
+                  <p className="text-sm font-semibold text-[#F85F54] px-1">
+                    {error}
+                  </p>
+                )}
+
                 <div className="pt-2">
                   <motion.button
                     whileTap={{ scale: 0.95 }}
                     type="submit"
-                    disabled={!name.trim() || !occupation.trim()}
-                    className="w-full bg-[#161211] text-[#F8F5F2] py-4 rounded-2xl font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-50"
+                    disabled={!name.trim() || !occupation.trim() || password.length < 6 || isLoading}
+                    className="w-full bg-[#161211] text-[#F8F5F2] py-4 rounded-2xl font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 flex justify-center items-center"
                   >
-                    {language === 'EN' ? 'Start Recording' : 'रिकॉर्डिंग शुरू करें'}
+                    {isLoading ? <div className="w-6 h-6 border-2 border-[#F8F5F2] border-t-transparent rounded-full animate-spin"></div> : (language === 'EN' ? 'Start Recording' : 'रिकॉर्डिंग शुरू करें')}
                   </motion.button>
                 </div>
               </form>

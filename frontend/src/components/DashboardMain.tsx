@@ -1,17 +1,50 @@
 import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { AnalyticsModal } from './AnalyticsModal'
+import { AnalyticsModal } from './AnalyticsModal.tsx'
+import { getInsights, type InsightsResult } from '../services/api'
 
 interface DashboardMainProps {
+  userId: string
   userName: string
+  userOccupation: string
   onToggleSidebar: () => void
   language: 'EN' | 'HI'
 }
 
-export const DashboardMain: React.FC<DashboardMainProps> = ({ userName, onToggleSidebar, language }) => {
+export const DashboardMain: React.FC<DashboardMainProps> = ({ userId, userName, userOccupation, onToggleSidebar, language }) => {
   const [displayBalance, setDisplayBalance] = useState(0)
   const [showAnalytics, setShowAnalytics] = useState(false)
-  const finalBalance = 14857.05
+  const [insights, setInsights] = useState<InsightsResult>({
+    totals: { sales: 0, expenses: 0 },
+    transactionCount: 0,
+  })
+  const finalBalance = Math.max(0, insights.totals.sales - insights.totals.expenses)
+
+  useEffect(() => {
+    let mounted = true
+
+    const loadInsights = async () => {
+      try {
+        const response = await getInsights(userId || undefined)
+        if (mounted) {
+          setInsights(response)
+        }
+      } catch {
+        if (mounted) {
+          setInsights({
+            totals: { sales: 0, expenses: 0 },
+            transactionCount: 0,
+          })
+        }
+      }
+    }
+
+    loadInsights()
+
+    return () => {
+      mounted = false
+    }
+  }, [userId])
 
   // Animate balance
   useEffect(() => {
@@ -31,7 +64,7 @@ export const DashboardMain: React.FC<DashboardMainProps> = ({ userName, onToggle
 
     animationFrame = requestAnimationFrame(animate)
     return () => cancelAnimationFrame(animationFrame)
-  }, [])
+  }, [finalBalance])
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -78,6 +111,11 @@ export const DashboardMain: React.FC<DashboardMainProps> = ({ userName, onToggle
           <p className="text-[#1A1A1A]/60 font-medium">
             {language === 'EN' ? 'AI manages your ledger so you can focus on sales.' : 'AI आपका लेजर प्रबंधित करता है ताकि आप बिक्री पर ध्यान दे सकें।'}
           </p>
+          {userOccupation && (
+            <p className="text-[#1A1A1A]/50 text-sm mt-1">
+              {language === 'EN' ? `Business type: ${userOccupation}` : `व्यवसाय प्रकार: ${userOccupation}`}
+            </p>
+          )}
         </motion.div>
 
         {/* Balance Card Container */}
@@ -103,7 +141,7 @@ export const DashboardMain: React.FC<DashboardMainProps> = ({ userName, onToggle
               <div className="inline-flex items-center gap-1.5 bg-[#8A9B80]/10 px-3 py-1.5 rounded-full mt-4">
                 <div className="w-2 h-2 rounded-full bg-[#8A9B80]"></div>
                 <span className="text-sm font-semibold text-[#8A9B80]">
-                  {language === 'EN' ? 'All good this month' : 'इस महीने सब ठीक है'}
+                  {language === 'EN' ? `${insights.transactionCount} transactions processed` : `${insights.transactionCount} लेन-देन प्रोसेस हुए`}
                 </span>
               </div>
             </div>
@@ -115,7 +153,9 @@ export const DashboardMain: React.FC<DashboardMainProps> = ({ userName, onToggle
           <div>
             <p className="text-[13px] font-medium text-[#1A1A1A] opacity-80 mb-1">AI insight</p>
             <h3 className="text-[15px] font-medium text-[#1A1A1A] leading-tight max-w-[200px]">
-              Stock more <span className="font-bold">Bananas</span> tomorrow based on trends
+              {language === 'EN'
+                ? `Net balance is ₹${Math.round(finalBalance).toLocaleString('en-IN')} from your latest entries.`
+                : `आपके नवीनतम रिकॉर्ड से शुद्ध बैलेंस ₹${Math.round(finalBalance).toLocaleString('en-IN')} है।`}
             </h3>
           </div>
           
