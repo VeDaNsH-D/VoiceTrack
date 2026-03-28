@@ -1,30 +1,42 @@
-# VoiceTrack ML Service
+# VoiceTrack
 
-## Setup
+This repository contains the VoiceTrack frontend and backend services.
 
-1. Install dependencies:
+## Frontend
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+The frontend is a React + Vite application.
 
-2. Run the server:
+Common commands:
 
-   ```bash
-   uvicorn app.main:app --reload
-   ```
+```bash
+npm install
+npm run dev
+```
 
-## Endpoints
+## Backend
 
-- `GET /health` — Health check
-- `POST /stt` — Speech-to-text (audio upload)
-- `POST /process` — Placeholder for text processing
+The backend service lives in `backend/` and exposes the transaction-processing API.
 
-## Folder Structure
+Common commands:
 
-- `app/`
-  - `main.py` — FastAPI app entrypoint
-  - `routes/` — API route handlers
-  - `services/` — ML and business logic
-  - `utils/` — Utilities (logging, etc.)
-  - `temp_audio/` — Temporary audio file storage
+```bash
+cd backend
+npm install
+npm run dev
+```
+
+Main endpoint:
+
+- `POST /process-text`
+
+Example request:
+
+```json
+{
+  "text": "Aaj 3 chai 10 ka aur 1 samosa 15 ka, 50 ka doodh liya"
+}
+```
+
+Health check:
+
+- `GET /health`
