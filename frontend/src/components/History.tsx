@@ -5,10 +5,12 @@ interface HistoryProps {
   onNavigate: (view: 'landing' | 'auth' | 'voice' | 'dashboard' | 'history') => void
 }
 
-type Period = 'Today' | 'This Week' | 'This Month'
+type Period = 'Today' | 'This Week' | 'This Month' | 'Custom'
 
 export const History: React.FC<HistoryProps> = ({ onNavigate }) => {
   const [activePeriod, setActivePeriod] = useState<Period>('Today')
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
 
   // Mock data for history based on vendor voice records
   const allHistoryData = [
@@ -23,7 +25,13 @@ export const History: React.FC<HistoryProps> = ({ onNavigate }) => {
   const filteredData = allHistoryData.filter(item => {
     if (activePeriod === 'Today') return item.period === 'Today'
     if (activePeriod === 'This Week') return item.period === 'Today' || item.period === 'This Week'
-    return true // 'This Month' shows all in this mock
+    if (activePeriod === 'This Month') return true
+    // If Custom, filter by simple string inclusion or logic. We mock it showing items that fall inside bounds.
+    if (activePeriod === 'Custom') {
+      if (!startDate || !endDate) return false // Require both to show
+      return true // For mockup, showing all when custom range is populated.
+    }
+    return true
   })
 
   return (
@@ -42,12 +50,12 @@ export const History: React.FC<HistoryProps> = ({ onNavigate }) => {
         </div>
 
         {/* Period Filter Pills */}
-        <div className="flex items-center gap-2 w-full pb-4 hide-scrollbar">
-          {(['Today', 'This Week', 'This Month'] as Period[]).map((period) => (
+        <div className="flex items-center gap-2 w-full pb-4 hide-scrollbar overflow-x-auto">
+          {(['Today', 'This Week', 'This Month', 'Custom'] as Period[]).map((period) => (
             <button
               key={period}
               onClick={() => setActivePeriod(period)}
-              className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-300 ${
+              className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-semibold transition-all duration-300 ${
                 activePeriod === period 
                   ? 'bg-[#1A1A1A] text-[#F8F5F2] shadow-md' 
                   : 'bg-white bg-opacity-40 text-[#1A1A1A] hover:bg-opacity-60'
@@ -57,6 +65,37 @@ export const History: React.FC<HistoryProps> = ({ onNavigate }) => {
             </button>
           ))}
         </div>
+
+        {/* Custom Date Range Inputs */}
+        <AnimatePresence>
+          {activePeriod === 'Custom' && (
+            <motion.div 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="w-full flex gap-3 pb-4"
+            >
+              <div className="flex-1 glass-card p-2 flex items-center px-3">
+                <span className="text-[10px] uppercase font-bold text-[#1A1A1A] opacity-50 mr-2">From</span>
+                <input 
+                  type="date" 
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="bg-transparent text-sm font-medium text-[#1A1A1A] w-full outline-none" 
+                />
+              </div>
+              <div className="flex-1 glass-card p-2 flex items-center px-3">
+                <span className="text-[10px] uppercase font-bold text-[#1A1A1A] opacity-50 mr-2">To</span>
+                <input 
+                  type="date" 
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="bg-transparent text-sm font-medium text-[#1A1A1A] w-full outline-none" 
+                />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 pb-32 z-10">
@@ -67,7 +106,10 @@ export const History: React.FC<HistoryProps> = ({ onNavigate }) => {
                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                  className="text-center py-10 opacity-60 text-sm font-medium"
                >
-                 No records for {activePeriod.toLowerCase()}
+                 {activePeriod === 'Custom' && (!startDate || !endDate) 
+                   ? 'Select a date range to view records.' 
+                   : `No records for ${activePeriod.toLowerCase()}`
+                 }
                </motion.div>
             ) : (
               filteredData.map((item, idx) => (

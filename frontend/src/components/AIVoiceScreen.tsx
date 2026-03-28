@@ -45,38 +45,45 @@ export const AIVoiceScreen: React.FC<AIVoiceScreenProps> = ({ userName, onNaviga
         </h1>
       </div>
 
-      {/* Comet Animation representing AI */}
-      <div className="flex-1 flex items-center justify-center relative">
-        {/* Circular Orbit Track */}
-        <div className="w-64 h-64 rounded-full border border-[#1A1A1A] border-opacity-10 relative flex items-center justify-center">
-          
-          {/* Soft pulsing center core */}
-          <motion.div 
-            animate={{ scale: [1, 1.2, 1], opacity: [0.3, 0.6, 0.3] }}
-            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-            className="w-24 h-24 rounded-full bg-[#8A9B80] blur-2xl"
-          />
+      {/* Majestic Halo AI Interface */}
+      <div className="flex-1 flex items-center justify-center relative perspective-[1000px]">
+        
+        {/* Core Glowing Orb */}
+        <motion.div 
+          animate={{ 
+            scale: [1, 1.1, 1], 
+            filter: ['blur(15px)', 'blur(25px)', 'blur(15px)'],
+            opacity: [0.7, 1, 0.7]
+          }}
+          transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+          className="absolute w-28 h-28 rounded-full bg-gradient-to-tr from-[#8A9B80] to-[#E6DFD7] shadow-[0_0_60px_15px_rgba(138,155,128,0.5)] z-10"
+        />
 
-          {/* Rotating Comet */}
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ duration: 2.5, repeat: Infinity, ease: "linear" }}
-            className="absolute inset-0 rounded-full"
-            style={{ originX: 0.5, originY: 0.5 }}
-          >
-            {/* Comet Tail using a clipped conic gradient */}
-            <div 
-              className="absolute inset-0 rounded-full" 
-              style={{
-                background: 'conic-gradient(from 0deg, transparent 0deg, transparent 200deg, rgba(168,152,115,0.1) 280deg, rgba(138,155,128,0.8) 360deg)',
-                maskImage: 'radial-gradient(transparent 63%, black 64%)',
-                WebkitMaskImage: 'radial-gradient(transparent 63%, black 64%)'
-              }}
-            />
-            {/* Comet Head - Floating on the exact track line */}
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 bg-[#F8F5F2] rounded-full shadow-[0_0_15px_5px_rgba(138,155,128,0.9)]" />
-          </motion.div>
-        </div>
+        {/* Ring 1: Fast Axis */}
+        <motion.div 
+          animate={{ rotateZ: 360, rotateX: [60, 75, 60], rotateY: [0, 180, 360] }}
+          transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
+          className="absolute w-56 h-56 rounded-full border-[1.5px] border-[#8A9B80] opacity-40 border-t-transparent shadow-[0_0_15px_rgba(138,155,128,0.2)]"
+          style={{ transformStyle: 'preserve-3d' }}
+        />
+
+        {/* Ring 2: Slow Counter Axis */}
+        <motion.div 
+          animate={{ rotateZ: -360, rotateX: [70, 85, 70], rotateY: [360, 180, 0] }}
+          transition={{ duration: 12, repeat: Infinity, ease: 'linear' }}
+          className="absolute w-48 h-48 rounded-full border-[2.5px] border-[#A89873] opacity-30 border-l-transparent shadow-[0_0_20px_rgba(168,152,115,0.2)]"
+          style={{ transformStyle: 'preserve-3d' }}
+        />
+
+        {/* Ring 3: Delicate Outer Halo */}
+        <motion.div 
+          animate={{ rotateZ: 360, scale: [1, 1.05, 1] }}
+          transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
+          className="absolute w-72 h-72 rounded-full border-[1px] border-dashed border-[#1A1A1A] opacity-10"
+        />
+
+        {/* Center Spark */}
+        <div className="w-8 h-8 rounded-full bg-white blur-md z-20 absolute" />
       </div>
 
       {/* Bottom Nav with cutout for Mic */}
