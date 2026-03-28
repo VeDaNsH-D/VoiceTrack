@@ -5,18 +5,26 @@ import { Auth } from './components/Auth'
 import { History } from './components/History'
 import { DashboardMain } from './components/DashboardMain'
 import { AIVoiceScreen } from './components/AIVoiceScreen'
+import { Chatbot } from './components/Chatbot'
+import { Sidebar } from './components/Sidebar'
 import './App.css'
 import './index.css'
 
-export type ViewState = 'landing' | 'auth' | 'voice' | 'dashboard' | 'history'
+export type ViewState = 'landing' | 'auth' | 'voice' | 'dashboard' | 'history' | 'chat'
 
 export function App() {
   const [currentView, setCurrentView] = useState<ViewState>('landing')
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false)
   const [userName, setUserName] = useState<string>('')
   const [userOccupation, setUserOccupation] = useState<string>('')
 
   const handleNavigate = (view: ViewState) => {
     setCurrentView(view)
+    setIsSidebarOpen(false)
+  }
+
+  const toggleSidebar = () => {
+    setIsSidebarOpen(!isSidebarOpen)
   }
 
   const handleLogin = (name: string, occupation: string) => {
@@ -33,6 +41,15 @@ export function App() {
 
   return (
     <div className="h-screen bg-app-gradient flex flex-col overflow-hidden">
+      
+      {/* Global Sidebar Component */}
+      <Sidebar 
+        isOpen={isSidebarOpen} 
+        onClose={() => setIsSidebarOpen(false)} 
+        onNavigate={handleNavigate} 
+        currentView={currentView} 
+      />
+
       <AnimatePresence mode="wait">
         {currentView === 'landing' && (
           <motion.div
@@ -67,7 +84,7 @@ export function App() {
             exit={{ opacity: 0 }}
             className="flex-1 overflow-y-auto"
           >
-            <DashboardMain userName={userName} onNavigate={handleNavigate} />
+            <DashboardMain userName={userName} onToggleSidebar={toggleSidebar} />
           </motion.div>
         )}
 
@@ -79,7 +96,7 @@ export function App() {
             exit={{ opacity: 0 }}
             className="flex-1 overflow-hidden h-full relative"
           >
-            <AIVoiceScreen userName={userName} onNavigate={handleNavigate} />
+            <AIVoiceScreen userName={userName} onToggleSidebar={toggleSidebar} />
           </motion.div>
         )}
 
@@ -91,7 +108,19 @@ export function App() {
             exit={{ opacity: 0 }}
             className="flex-1 overflow-hidden h-full relative"
           >
-            <History onNavigate={handleNavigate} />
+            <History onToggleSidebar={toggleSidebar} />
+          </motion.div>
+        )}
+
+        {currentView === 'chat' && (
+          <motion.div
+            key="chat"
+            initial={{ opacity: 0, scale: 0.98 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0 }}
+            className="flex-1 overflow-hidden h-full relative"
+          >
+            <Chatbot onToggleSidebar={toggleSidebar} />
           </motion.div>
         )}
       </AnimatePresence>

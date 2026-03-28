@@ -2,12 +2,12 @@ import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 interface HistoryProps {
-  onNavigate: (view: 'landing' | 'auth' | 'voice' | 'dashboard' | 'history') => void
+  onToggleSidebar: () => void
 }
 
 type Period = 'Today' | 'This Week' | 'This Month' | 'Custom'
 
-export const History: React.FC<HistoryProps> = ({ onNavigate }) => {
+export const History: React.FC<HistoryProps> = ({ onToggleSidebar }) => {
   const [activePeriod, setActivePeriod] = useState<Period>('Today')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
@@ -44,7 +44,7 @@ export const History: React.FC<HistoryProps> = ({ onNavigate }) => {
       <div className="px-6 pt-12 pb-2 flex flex-col items-start justify-between z-10 w-full">
         <div className="w-full flex justify-between items-center mb-6">
           <button 
-            onClick={() => onNavigate('dashboard')}
+            onClick={onToggleSidebar}
             className="w-10 h-10 bg-white bg-opacity-60 rounded-full flex items-center justify-center hover:bg-opacity-100 transition-colors shadow-sm"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -153,45 +153,6 @@ export const History: React.FC<HistoryProps> = ({ onNavigate }) => {
         </AnimatePresence>
       </div>
 
-      {/* Modern Bottom Nav */}
-      <div className="absolute bottom-0 w-full h-[100px] bg-[#161211] rounded-t-[40px] flex items-center justify-between px-16 z-50">
-        <button 
-          className="text-[#F8F5F2] opacity-40 hover:opacity-100 mt-2 transition-opacity"
-        >
-          {/* Empty Placeholder for symmetry */}
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
-            <line x1="6" y1="8" x2="6" y2="8"></line>
-            <line x1="10" y1="8" x2="10" y2="8"></line>
-            <line x1="14" y1="8" x2="14" y2="8"></line>
-            <line x1="18" y1="8" x2="18" y2="8"></line>
-            <line x1="6" y1="12" x2="6" y2="12"></line>
-            <line x1="10" y1="12" x2="10" y2="12"></line>
-            <line x1="14" y1="12" x2="14" y2="12"></line>
-            <line x1="18" y1="12" x2="18" y2="12"></line>
-            <line x1="8" y1="16" x2="16" y2="16"></line>
-          </svg>
-        </button>
-        
-        <button 
-          onClick={() => onNavigate('voice')}
-          className="text-[#F8F5F2] opacity-60 hover:opacity-100 mt-2 transition-opacity"
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-             <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-          </svg>
-        </button>
-
-        <button 
-          className="text-[#F8F5F2] opacity-100 mt-2"
-        >
-          {/* History Icon */}
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10"></circle>
-            <polyline points="12 6 12 12 16 14"></polyline>
-          </svg>
-        </button>
-      </div>
     </motion.div>
   )
 }

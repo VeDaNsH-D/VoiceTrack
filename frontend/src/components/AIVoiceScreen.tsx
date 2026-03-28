@@ -3,10 +3,10 @@ import { motion } from 'framer-motion'
 
 interface AIVoiceScreenProps {
   userName: string
-  onNavigate: (view: 'landing' | 'auth' | 'voice' | 'dashboard' | 'history') => void
+  onToggleSidebar: () => void
 }
 
-export const AIVoiceScreen: React.FC<AIVoiceScreenProps> = ({ userName, onNavigate }) => {
+export const AIVoiceScreen: React.FC<AIVoiceScreenProps> = ({ userName, onToggleSidebar }) => {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -17,7 +17,7 @@ export const AIVoiceScreen: React.FC<AIVoiceScreenProps> = ({ userName, onNaviga
       {/* Top Header */}
       <div className="flex items-center justify-between px-6 pt-12 pb-4">
         <button 
-          onClick={() => onNavigate('dashboard')}
+          onClick={onToggleSidebar}
           className="w-12 h-12 bg-[#EFEBE4] rounded-full flex items-center justify-center hover:bg-[#E3DCD3] transition-colors shadow-sm"
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -91,51 +91,16 @@ export const AIVoiceScreen: React.FC<AIVoiceScreenProps> = ({ userName, onNaviga
         <div className="w-8 h-8 rounded-full bg-white blur-md z-20 absolute" />
       </div>
 
-      {/* Bottom Nav with cutout for Mic */}
-      <div className="h-32 relative flex items-end">
-        {/* Deep dark bottom nav background with center cutout */}
-        <div className="absolute bottom-0 w-full h-[100px] bg-[#161211] rounded-t-[40px] flex items-center justify-between px-16">
-          <button 
-            className="text-[#F8F5F2] opacity-40 hover:opacity-100 mt-2 transition-opacity"
+      {/* Floating Center Mic Button */}
+      <div className="absolute left-1/2 bottom-[40px] -translate-x-1/2 z-30">
+        <div className="bg-[#161211] rounded-[32px] p-2 shadow-2xl border border-white/5">
+          <motion.button 
+            whileTap={{ scale: 0.9 }}
+            whileHover={{ scale: 1.05 }}
+            className="w-16 h-16 bg-[#F85F54] rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(248,95,84,0.4)]"
           >
-             {/* Empty Placeholder for symmetry */}
-             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
-              <line x1="6" y1="8" x2="6" y2="8"></line>
-              <line x1="10" y1="8" x2="10" y2="8"></line>
-              <line x1="14" y1="8" x2="14" y2="8"></line>
-              <line x1="18" y1="8" x2="18" y2="8"></line>
-              <line x1="6" y1="12" x2="6" y2="12"></line>
-              <line x1="10" y1="12" x2="10" y2="12"></line>
-              <line x1="14" y1="12" x2="14" y2="12"></line>
-              <line x1="18" y1="12" x2="18" y2="12"></line>
-              <line x1="8" y1="16" x2="16" y2="16"></line>
-             </svg>
-          </button>
-          
-          <button 
-            onClick={() => onNavigate('history')}
-            className="text-[#F8F5F2] opacity-60 hover:opacity-100 mt-2 transition-opacity"
-          >
-            {/* History Icon */}
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <polyline points="12 6 12 12 16 14"></polyline>
-            </svg>
-          </button>
-        </div>
-
-        {/* Floating Center Mic Button */}
-        <div className="absolute left-1/2 bottom-[40px] -translate-x-1/2 z-10">
-          <div className="bg-[#161211] rounded-full p-2">
-            <motion.button 
-              whileTap={{ scale: 0.9 }}
-              whileHover={{ scale: 1.05 }}
-              className="w-16 h-16 bg-[#F85F54] rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(248,95,84,0.4)]"
-            >
-              <div className="w-5 h-5 rounded-sm bg-white border border-white"></div>
-            </motion.button>
-          </div>
+            <div className="w-5 h-5 rounded-sm bg-white border border-white"></div>
+          </motion.button>
         </div>
       </div>
     </motion.div>
