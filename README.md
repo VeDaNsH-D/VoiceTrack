@@ -1,46 +1,42 @@
-# React + Vite
+# VoiceTrack
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This repository contains the VoiceTrack frontend and backend services.
 
-Currently, two official plugins are available:
+## Frontend
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+The frontend is a React + Vite application.
 
-## React Compiler
+Common commands:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm install
+npm run dev
+```
 
-## Expanding the ESLint configuration
+## Backend
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
-# VoiceTrack ML Service
+The backend service lives in `backend/` and exposes the transaction-processing API.
 
-## Setup
+Common commands:
 
-1. Install dependencies:
+```bash
+cd backend
+npm install
+npm run dev
+```
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+Main endpoint:
 
-2. Run the server:
+- `POST /process-text`
 
-   ```bash
-   uvicorn app.main:app --reload
-   ```
+Example request:
 
-## Endpoints
+```json
+{
+  "text": "Aaj 3 chai 10 ka aur 1 samosa 15 ka, 50 ka doodh liya"
+}
+```
 
-- `GET /health` — Health check
-- `POST /stt` — Speech-to-text (audio upload)
-- `POST /process` — Placeholder for text processing
+Health check:
 
-## Folder Structure
-
-- `app/`
-  - `main.py` — FastAPI app entrypoint
-  - `routes/` — API route handlers
-  - `services/` — ML and business logic
-  - `utils/` — Utilities (logging, etc.)
-  - `temp_audio/` — Temporary audio file storage
+- `GET /health`
