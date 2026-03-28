@@ -6,19 +6,26 @@
 
 @layer base {
   body {
-    background-color: #F8F5F2; /* Base cream color */
+    background-color: #F8F5F2;
+    /* Base cream color */
     color: #1A1A1A;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     font-weight: 500;
     letter-spacing: -0.02em;
   }
 }
 
 @layer components {
+
   /* Ultra-modern glass card matching the design */
   .glass-card {
     background: rgba(230, 224, 218, 0.6);
@@ -53,17 +60,17 @@
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
   }
-  
+
   .bg-app-gradient {
     background: radial-gradient(circle at top left, #ebfae1 0%, transparent 40%),
-                radial-gradient(circle at top right, #fce0c7 0%, transparent 40%),
-                radial-gradient(circle at bottom center, #f5e9d3 0%, #f6f1ec 100%);
+      radial-gradient(circle at top right, #fce0c7 0%, transparent 40%),
+      radial-gradient(circle at bottom center, #f5e9d3 0%, #f6f1ec 100%);
     background-color: #f6f1ec;
   }
-  
+
   .bg-grid-pattern {
     background-size: 40px 40px;
-    background-image: 
+    background-image:
       linear-gradient(to right, rgba(0, 0, 0, 0.03) 1px, transparent 1px),
       linear-gradient(to bottom, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
   }
@@ -76,7 +83,7 @@
     border: 1px solid rgba(255, 255, 255, 0.9);
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.03);
   }
-  
+
   .phone-mockup {
     background: #ffffff;
     border-radius: 40px;
