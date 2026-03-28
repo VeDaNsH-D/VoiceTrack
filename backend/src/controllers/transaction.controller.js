@@ -1,6 +1,8 @@
-const Transaction = require("../models/transaction.model");
-const RawLog = require("../models/rawLog.model");
 const { processTransactionText } = require("../services/extraction.service");
+const {
+  saveProcessedTransaction,
+  saveRawLog,
+} = require("../services/transaction.store");
 
 async function processText(req, res, next) {
   try {
@@ -22,11 +24,20 @@ async function processText(req, res, next) {
       normalizedText,
       source: "api",
       status: result.meta.needs_clarification ? "clarification" : "processed",
+      parseMeta: {
+        confidence: result.meta.confidence,
+        parserSource: result.meta.source,
+        needsClarification: result.meta.needs_clarification,
+        clarificationQuestion: result.meta.clarification_question,
+      },
     };
 
-    const transactionPayload = {
+    const rawLog = await saveRawLog(rawLogPayload);
+
+    await saveProcessedTransaction({
       rawText: text,
       normalizedText,
+      rawLogId: rawLog?._id || null,
       sales: result.sales,
       expenses: result.expenses,
       meta: {
@@ -35,12 +46,7 @@ async function processText(req, res, next) {
         needsClarification: result.meta.needs_clarification,
         clarificationQuestion: result.meta.clarification_question,
       },
-    };
-
-    await Promise.allSettled([
-      RawLog.create(rawLogPayload),
-      Transaction.create(transactionPayload),
-    ]);
+    });
 
     return res.status(200).json(result);
   } catch (error) {

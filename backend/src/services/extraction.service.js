@@ -1,12 +1,73 @@
 const env = require("../config/env");
-const {
-  CONFIDENCE_THRESHOLD,
-  EXPENSE_HINTS,
-} = require("../constants");
 const { preprocessText } = require("../utils/normalization");
 const { validateOutput } = require("./validation.service");
 
-function createEmptyResponse() {
+function detectResponseLanguage(text) {
+  const input = String(text || "");
+
+  if (/[\u0900-\u097F]/.test(input)) {
+    return "marathi";
+  }
+
+  if (/\b(aaj|chai|samosa|doodh|liya|aur|ka|matlab|bhai|haan)\b/i.test(input)) {
+    return "hinglish";
+  }
+
+  return "english";
+}
+
+function getClarificationMessage(language) {
+  if (language === "marathi") {
+    return "कृपया व्यवहार थोडा स्पष्ट सांगाल का? कोणती वस्तू, किती प्रमाण, आणि किती रक्कम होती ते कृपया सांगा.";
+  }
+
+  if (language === "hinglish") {
+    return "Kripya transaction thoda clearly batayiye. Kaunsi item thi, kitni quantity thi, aur kitna amount tha?";
+  }
+
+  return "Could you please restate the transaction clearly with item, quantity, price, and expense amount?";
+}
+
+function makeRespectfulClarification(question, language) {
+  const fallback = getClarificationMessage(language);
+  const value = String(question || "").trim();
+
+  if (!value) {
+    return fallback;
+  }
+
+  if (language === "marathi") {
+    if (/^0 .*काय मतलब/i.test(value) || /^0 .*काय/i.test(value)) {
+      return "कृपया सांगाल का, येथे प्रमाण 0 आहे का, की काही वेगळा अर्थ अभिप्रेत आहे?";
+    }
+
+    return value;
+  }
+
+  if (language === "hinglish") {
+    if (/^0 .*kya matlab/i.test(value) || /\bkya matlab hai\?/i.test(value)) {
+      return "Kripya batayiye, yahan quantity 0 hai ya aapka kuch aur matlab tha?";
+    }
+
+    if (!/kripya|please|kindly/i.test(value)) {
+      return `Kripya batayiye, ${value.charAt(0).toLowerCase()}${value.slice(1)}`;
+    }
+
+    return value;
+  }
+
+  if (/^0 .*what does/i.test(value)) {
+    return "Could you please clarify whether the quantity is 0 here, or whether you meant something else?";
+  }
+
+  if (!/please|could you|kindly/i.test(value)) {
+    return `Could you please clarify: ${value.charAt(0).toLowerCase()}${value.slice(1)}`;
+  }
+
+  return value;
+}
+
+function createEmptyResponse(language, llmError = null) {
   return {
     sales: [],
     expenses: [],
@@ -14,8 +75,13 @@ function createEmptyResponse() {
       confidence: 0.1,
       source: "fallback",
       needs_clarification: true,
-      clarification_question:
-        "Please confirm the items, quantities, and prices in this transaction.",
+      clarification_question: getClarificationMessage(language),
+    },
+    debug: {
+      llm_attempted: false,
+      llm_succeeded: false,
+      llm_used_live_response: false,
+      llm_error: llmError,
     },
   };
 }
@@ -50,119 +116,62 @@ function mergeDuplicates(data) {
   };
 }
 
-function classifyQtyPriceMatch(text, item) {
-  const expensePhrase = new RegExp(
-    `\\b${item}\\b\\s*(liya|kharcha|kharida)\\b`,
-    "i"
-  );
-  if (expensePhrase.test(text)) {
-    return "expense";
-  }
-
-  return "sale";
-}
-
-function classifyAmountItemMatch(rawMatch, text, item) {
-  if (/\b(liya|kharcha|kharida)\b/i.test(rawMatch)) {
-    return "expense";
-  }
-
-  const expensePhrase = new RegExp(
-    `\\b(?:\\d+\\s*ka\\s+)?${item}\\b\\s*(liya|kharcha|kharida)\\b`,
-    "i"
-  );
-  if (expensePhrase.test(text)) {
-    return "expense";
-  }
-
-  return "sale";
-}
-
-function extractRuleMatches(text) {
-  const qtyPriceRegex = /(\d+)\s*([a-z]+)\s*(\d+)(?:\s*ka)?/g;
-  const amountItemRegex = /(\d+)\s*(?:ka\s+)?([a-z]+)(?:\s+liya)?/g;
-
-  const sales = [];
-  const expenses = [];
-  const consumedRanges = [];
-
+function reconcileExplicitPrices(text, data) {
+  const explicitSales = [];
+  const regex = /(\d+)\s*([a-z]+)\s*(\d+)(?:\s*ka)?/g;
   let match;
-  while ((match = qtyPriceRegex.exec(text)) !== null) {
-    const [raw, qtyValue, itemValue, priceValue] = match;
-    const qty = Number(qtyValue);
-    const price = Number(priceValue);
-    const item = itemValue.trim();
 
-    consumedRanges.push([match.index, match.index + raw.length]);
-
-    if (!item || qty <= 0 || price <= 0) {
-      continue;
-    }
-
-    if (classifyQtyPriceMatch(text, item) === "expense") {
-      expenses.push({ item, amount: qty });
-      continue;
-    }
-
-    sales.push({ item, qty, price });
+  while ((match = regex.exec(text)) !== null) {
+    explicitSales.push({
+      qty: Number(match[1]),
+      item: match[2].trim(),
+      price: Number(match[3]),
+    });
   }
 
-  while ((match = amountItemRegex.exec(text)) !== null) {
-    const [raw, amountValue, itemValue] = match;
-    const amount = Number(amountValue);
-    const item = itemValue.trim();
-    const start = match.index;
-    const end = start + raw.length;
+  if (!explicitSales.length) {
+    return data;
+  }
 
-    const overlaps = consumedRanges.some(
-      ([rangeStart, rangeEnd]) => start < rangeEnd && end > rangeStart
+  const reconciledSales = (data.sales || []).map((sale) => {
+    const explicitMatch = explicitSales.find(
+      (entry) => entry.item === sale.item && entry.qty === sale.qty
     );
 
-    if (overlaps || !item || amount <= 0) {
-      continue;
+    if (!explicitMatch) {
+      return sale;
     }
 
-    if (classifyAmountItemMatch(raw, text, item) === "expense") {
-      expenses.push({ item, amount });
-    }
-  }
+    return {
+      ...sale,
+      price: explicitMatch.price,
+    };
+  });
 
-  return { sales, expenses };
+  return {
+    ...data,
+    sales: reconciledSales,
+  };
 }
 
-function detectAmbiguity(text, extractedData) {
-  const conjunctions = (text.match(/\baur\b/g) || []).length;
-  const hasMultipleMentions =
-    extractedData.sales.length + extractedData.expenses.length > 1;
-  const priceMentions = (text.match(/\b\d+\s*ka\b/g) || []).length;
-  const hasExpenseHints = EXPENSE_HINTS.some((hint) => text.includes(hint));
-  const unmatchedItemMention =
-    /\b\d+\s+[a-z]+\s+aur\s+[a-z]+\s+\d+\s*ka\b/.test(text) ||
-    (conjunctions > 0 && !hasMultipleMentions);
-  const missingStructuredOutput =
-    extractedData.sales.length === 0 && extractedData.expenses.length === 0;
+function detectAmbiguity(text, data) {
+  const language = detectResponseLanguage(text);
+  const hasData = (data.sales?.length || 0) + (data.expenses?.length || 0) > 0;
 
-  if (missingStructuredOutput) {
+  if (!hasData) {
     return {
       ambiguous: true,
-      clarification_question:
-        "I could not identify the items clearly. Please restate the transaction with quantities and prices.",
+      clarification_question: getClarificationMessage(language),
     };
   }
 
-  if (unmatchedItemMention || priceMentions < extractedData.sales.length) {
+  if (data.meta?.needs_clarification) {
     return {
       ambiguous: true,
-      clarification_question:
-        "Please clarify which price belongs to which item.",
-    };
-  }
-
-  if (hasExpenseHints && extractedData.expenses.length === 0) {
-    return {
-      ambiguous: true,
-      clarification_question:
-        "I noticed an expense phrase, but the expense amount or item is unclear.",
+      clarification_question: makeRespectfulClarification(
+        data.meta.clarification_question,
+        language
+      ),
     };
   }
 
@@ -175,88 +184,64 @@ function detectAmbiguity(text, extractedData) {
 function computeConfidence(data, source) {
   const hasStructuredData =
     (data.sales?.length || 0) + (data.expenses?.length || 0) > 0;
-  const ruleSuccess = hasStructuredData ? 0.4 : 0;
-  const completeness = !data.meta?.needs_clarification ? 0.3 : 0.1;
+  const completeness = !data.meta?.needs_clarification ? 0.35 : 0.15;
   const validationScore =
     hasStructuredData ||
     (data.meta?.needs_clarification && data.meta?.clarification_question)
-      ? 0.3
+      ? 0.35
       : 0;
-  const baseScore = ruleSuccess + completeness + validationScore;
+  const llmBase = source === "llm" ? 0.2 : 0;
 
-  if (source === "llm") {
-    return Math.max(0, Math.min(0.85, baseScore - 0.15));
-  }
-
-  if (source === "fallback") {
-    return Math.max(0.05, Math.min(0.3, baseScore));
-  }
-
-  return Math.max(0, Math.min(1, baseScore));
-}
-
-function ruleBasedExtraction(text) {
-  const extracted = extractRuleMatches(text);
-  const ambiguity = detectAmbiguity(text, extracted);
-  const merged = mergeDuplicates({
-    sales: extracted.sales,
-    expenses: extracted.expenses,
-    meta: {
-      source: "rules",
-      needs_clarification: ambiguity.ambiguous,
-      clarification_question: ambiguity.clarification_question,
-    },
-  });
-
-  const confidence = computeConfidence(merged, "rules");
-
-  return {
-    data: {
-      ...merged,
-      meta: {
-        ...merged.meta,
-        source: "rules",
-        confidence,
-      },
-    },
-    success:
-      (merged.sales.length > 0 || merged.expenses.length > 0) &&
-      !ambiguity.ambiguous,
-    confidence,
-  };
+  return Math.max(
+    0.05,
+    Math.min(0.9, Number((llmBase + completeness + validationScore).toFixed(2)))
+  );
 }
 
 async function callLlmFallback(text) {
-  if (!env.openAiApiKey) {
-    return createEmptyResponse();
+  const responseLanguage = detectResponseLanguage(text);
+
+  if (!env.geminiApiKey) {
+    return {
+      ...createEmptyResponse(responseLanguage, "missing_api_key"),
+      debug: {
+        llm_attempted: false,
+        llm_succeeded: false,
+        llm_used_live_response: false,
+        llm_error: "missing_api_key",
+      },
+    };
   }
 
   const prompt = [
-    "Extract structured transaction data.",
+    "Extract structured transaction data from the user text.",
     "Return ONLY valid JSON.",
-    "No explanation.",
-    "No hallucination.",
+    "Do not add explanations.",
+    "Do not hallucinate missing values.",
     "If unclear, set needs_clarification to true.",
+    "The clarification_question must be in the same language or language-mix as the user's input.",
+    "The clarification_question must be respectful, polite, and natural.",
+    `User language style: ${responseLanguage}`,
     'Format: {"sales":[{"item":"string","qty":1,"price":1}],"expenses":[{"item":"string","amount":1}],"needs_clarification":false,"clarification_question":null}',
     `Input: ${text}`,
   ].join("\n");
 
   try {
-    const response = await fetch(`${env.openAiBaseUrl}/chat/completions`, {
+    const response = await fetch(`${env.geminiBaseUrl}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${env.openAiApiKey}`,
+        Authorization: `Bearer ${env.geminiApiKey}`,
       },
       body: JSON.stringify({
-        model: env.openAiModel,
+        model: env.geminiModel,
         temperature: 0,
         response_format: { type: "json_object" },
         messages: [
           {
             role: "system",
             content:
-              "You extract transaction data and return strict JSON only.",
+              "You convert raw transaction text into strict JSON with sales and expenses.",
           },
           {
             role: "user",
@@ -280,61 +265,76 @@ async function callLlmFallback(text) {
       meta: {
         source: "llm",
         needs_clarification: Boolean(parsed.needs_clarification),
-        clarification_question: parsed.clarification_question || null,
+        clarification_question: makeRespectfulClarification(
+          parsed.clarification_question,
+          responseLanguage
+        ),
+      },
+      debug: {
+        llm_attempted: true,
+        llm_succeeded: true,
+        llm_used_live_response: true,
+        llm_error: null,
       },
     };
   } catch (error) {
-    return createEmptyResponse();
-  }
-}
-
-async function processTransactionText(text) {
-  const normalizedText = preprocessText(text);
-  const ruleResult = ruleBasedExtraction(normalizedText);
-
-  if (
-    ruleResult.success &&
-    !ruleResult.data.meta.needs_clarification &&
-    ruleResult.confidence >= CONFIDENCE_THRESHOLD
-  ) {
     return {
-      normalizedText,
-      result: ruleResult.data,
-    };
-  }
-
-  const llmCandidate = await callLlmFallback(normalizedText);
-  const mergedLlmCandidate = mergeDuplicates(llmCandidate);
-  const validationResult = validateOutput(mergedLlmCandidate);
-
-  if (validationResult.valid) {
-    const confidence = computeConfidence(validationResult.data, "llm");
-    return {
-      normalizedText,
-      result: {
-        ...validationResult.data,
-        meta: {
-          ...validationResult.data.meta,
-          source: "llm",
-          confidence,
-        },
+      ...createEmptyResponse(error.message || "unknown_llm_error"),
+      meta: {
+        ...createEmptyResponse(responseLanguage, error.message || "unknown_llm_error").meta,
+      },
+      debug: {
+        llm_attempted: true,
+        llm_succeeded: false,
+        llm_used_live_response: false,
+        llm_error: error.message || "unknown_llm_error",
       },
     };
   }
+}
 
-  if (ruleResult.data.sales.length || ruleResult.data.expenses.length) {
+async function callLLM(text) {
+  return callLlmFallback(text);
+}
+
+async function processTransactionText(text) {
+  const responseLanguage = detectResponseLanguage(text);
+  const normalizedText = preprocessText(text);
+  const llmCandidate = await callLlmFallback(normalizedText);
+  const mergedCandidate = mergeDuplicates(
+    reconcileExplicitPrices(normalizedText, llmCandidate)
+  );
+  const ambiguity = detectAmbiguity(normalizedText, mergedCandidate);
+  const validated = validateOutput({
+    sales: mergedCandidate.sales,
+    expenses: mergedCandidate.expenses,
+    meta: {
+      source: "llm",
+      needs_clarification:
+        mergedCandidate.meta?.needs_clarification || ambiguity.ambiguous,
+      clarification_question:
+        mergedCandidate.meta?.clarification_question ||
+        ambiguity.clarification_question,
+    },
+  });
+
+  if (validated.valid) {
     return {
       normalizedText,
       result: {
-        ...ruleResult.data,
+        ...validated.data,
         meta: {
-          ...ruleResult.data.meta,
-          source: "rules",
-          confidence: Math.min(ruleResult.confidence, 0.65),
-          needs_clarification: true,
-          clarification_question:
-            ruleResult.data.meta.clarification_question ||
-            "Please confirm the missing quantity, item, or price details.",
+          ...validated.data.meta,
+          source: "llm",
+          confidence: computeConfidence(validated.data, "llm"),
+        },
+        debug: {
+          llm_attempted: Boolean(llmCandidate.debug?.llm_attempted),
+          llm_succeeded: Boolean(llmCandidate.debug?.llm_succeeded),
+          llm_used_live_response: Boolean(
+            llmCandidate.debug?.llm_used_live_response
+          ),
+          llm_error: llmCandidate.debug?.llm_error || null,
         },
       },
     };
@@ -342,14 +342,36 @@ async function processTransactionText(text) {
 
   return {
     normalizedText,
-    result: createEmptyResponse(),
+    result: {
+      ...createEmptyResponse(
+        responseLanguage,
+        llmCandidate.debug?.llm_error || "llm_output_failed_validation"
+      ),
+      debug: {
+        llm_attempted: Boolean(llmCandidate.debug?.llm_attempted),
+        llm_succeeded: false,
+        llm_used_live_response: false,
+        llm_error:
+          llmCandidate.debug?.llm_error || "llm_output_failed_validation",
+      },
+    },
   };
+}
+
+async function extractWithRules(text) {
+  return callLlmFallback(preprocessText(text));
+}
+
+async function ruleBasedExtraction(text) {
+  return callLlmFallback(preprocessText(text));
 }
 
 module.exports = {
   preprocessText,
+  extractWithRules,
   ruleBasedExtraction,
   detectAmbiguity,
+  callLLM,
   callLlmFallback,
   validateOutput,
   computeConfidence,
