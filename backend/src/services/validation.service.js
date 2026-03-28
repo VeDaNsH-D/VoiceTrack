@@ -1,3 +1,8 @@
+const {
+  normalizeItemValue,
+  normalizeNumericValue,
+} = require("../utils/normalization");
+
 function validateSales(sales) {
   if (!Array.isArray(sales)) {
     return [];
@@ -6,9 +11,9 @@ function validateSales(sales) {
   return sales
     .filter((sale) => sale && typeof sale.item === "string")
     .map((sale) => ({
-      item: sale.item.trim(),
-      qty: Number(sale.qty),
-      price: Number(sale.price),
+      item: normalizeItemValue(sale.item),
+      qty: normalizeNumericValue(sale.qty),
+      price: normalizeNumericValue(sale.price),
     }))
     .filter((sale) => sale.item && sale.qty > 0 && sale.price > 0);
 }
@@ -21,8 +26,8 @@ function validateExpenses(expenses) {
   return expenses
     .filter((expense) => expense && typeof expense.item === "string")
     .map((expense) => ({
-      item: expense.item.trim(),
-      amount: Number(expense.amount),
+      item: normalizeItemValue(expense.item),
+      amount: normalizeNumericValue(expense.amount),
     }))
     .filter((expense) => expense.item && expense.amount > 0);
 }
@@ -57,7 +62,7 @@ function validateOutput(data) {
         confidence: 0,
         source: data.meta?.source || "fallback",
         needs_clarification: hasClarification,
-        clarification_question: question,
+        clarification_question: hasClarification ? question : null,
       },
     },
   };

@@ -27,6 +27,23 @@ function preprocessText(text) {
   return normalized;
 }
 
+function normalizeItemValue(item) {
+  const normalized = preprocessText(String(item || ""));
+  return normalized.replace(/\s+/g, " ").trim();
+}
+
+function normalizeNumericValue(value) {
+  if (typeof value === "number") {
+    return value;
+  }
+
+  const normalized = preprocessText(String(value || ""));
+  const match = normalized.match(/-?\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : Number.NaN;
+}
+
 module.exports = {
   preprocessText,
+  normalizeItemValue,
+  normalizeNumericValue,
 };

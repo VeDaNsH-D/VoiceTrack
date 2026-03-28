@@ -9,21 +9,21 @@ const userSchema = new mongoose.Schema(
         },
         phone: {
             type: String,
-            unique: true,
-            sparse: true,
             trim: true
         },
         email: {
             type: String,
-            unique: true,
-            sparse: true,
             lowercase: true,
             trim: true
         },
-        name: {
+        role: {
             type: String,
-            required: true,
-            trim: true
+            enum: ["owner", "staff", "admin"],
+            default: "owner"
+        },
+        isActive: {
+            type: Boolean,
+            default: true
         },
         passwordHash: {
             type: String,
@@ -51,6 +51,22 @@ userSchema.pre("validate", function setIdentityValidation() {
         this.invalidate("phone", "Phone or email is required");
     }
 });
+
+userSchema.index(
+    { email: 1 },
+    {
+        unique: true,
+        partialFilterExpression: { email: { $type: "string" } }
+    }
+);
+
+userSchema.index(
+    { phone: 1 },
+    {
+        unique: true,
+        partialFilterExpression: { phone: { $type: "string" } }
+    }
+);
 
 userSchema.set("toJSON", {
     transform: (doc, ret) => {

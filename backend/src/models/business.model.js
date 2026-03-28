@@ -2,18 +2,30 @@ const mongoose = require("mongoose");
 
 const businessSchema = new mongoose.Schema(
     {
-        ownerId: {
-            type: mongoose.Schema.Types.ObjectId,
-            ref: "User"
-        },
-        category: {
-            type: String,
-            trim: true
-        },
         name: {
             type: String,
             required: true,
             trim: true
+        },
+        category: {
+            type: String,
+            trim: true,
+            default: "general"
+        },
+        currency: {
+            type: String,
+            trim: true,
+            uppercase: true,
+            default: "INR"
+        },
+        language: {
+            type: String,
+            trim: true,
+            default: "hinglish"
+        },
+        isActive: {
+            type: Boolean,
+            default: true
         },
         type: {
             type: String,
