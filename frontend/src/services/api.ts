@@ -1,6 +1,7 @@
 import axios from 'axios'
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL?.trim() || 'http://localhost:5001').replace(/\/$/, '')
+const API_BASE = (import.meta.env.VITE_API_BASE_URL?.trim() || 'http://localhost:5000').replace(/\/$/, '')
+const VOICE_API_BASE = (import.meta.env.VITE_VOICE_API_BASE_URL?.trim() || 'http://localhost:8000').replace(/\/$/, '')
 
 const apiClient = axios.create({
   baseURL: API_BASE,
@@ -8,6 +9,11 @@ const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+})
+
+const voiceApiClient = axios.create({
+  baseURL: VOICE_API_BASE,
+  timeout: 120000,
 })
 
 export interface AuthUser {
@@ -102,6 +108,41 @@ export interface ChatResult {
   audioNeeded: boolean
 }
 
+export interface ConversationStructuredData {
+  sales: Array<{ item: string; qty: number; price: number }>
+  expenses: Array<{ item: string; amount: number }>
+  meta: {
+    confidence?: number
+    source?: string
+    needs_clarification: boolean
+    clarification_question?: string | null
+  }
+  debug?: unknown
+}
+
+export interface ConversationResult {
+  user_id: string
+  transcript: string
+  structuring_input: string
+  stt: {
+    source?: string
+    confidence?: number
+    debug?: unknown
+  }
+  structured_data: ConversationStructuredData | null
+  conversation_state: {
+    clarification_pending: boolean
+    finalized: boolean
+    started_new: boolean
+  }
+  assistant: {
+    reply: string
+    audio_path: string | null
+    audio_url: string
+    audio_needed: boolean
+  }
+}
+
 export function setAuthToken(token: string | null): void {
   if (!token) {
     delete apiClient.defaults.headers.common.Authorization
@@ -142,6 +183,23 @@ export async function processTransactionText(payload: {
   return response.data
 }
 
+export async function saveStructuredTransaction(payload: {
+  userId: string
+  rawText: string
+  normalizedText: string
+  sales: Array<{ item: string; qty: number; price: number }>
+  expenses: Array<{ item: string; amount: number }>
+  meta?: {
+    confidence?: number
+    source?: string
+    needs_clarification?: boolean
+    clarification_question?: string | null
+  }
+}): Promise<any> {
+  const response = await apiClient.post<any>('/api/transactions/save', payload)
+  return response.data
+}
+
 export async function getTransactionHistory(params: {
   userId?: string
   startDate?: string
@@ -176,6 +234,25 @@ export async function chatWithAssistant(payload: {
   sttProvider?: string
 }): Promise<ChatResult> {
   const response = await apiClient.post<ChatResult>('/chat', payload)
+  return response.data
+}
+
+export async function sendConversationAudio(payload: {
+  audioBlob: Blob
+  userId: string
+  startNew?: boolean
+}): Promise<ConversationResult> {
+  const formData = new FormData()
+  formData.append('file', payload.audioBlob, 'recording.wav')
+  formData.append('user_id', payload.userId)
+  formData.append('start_new', String(Boolean(payload.startNew)))
+
+  const response = await voiceApiClient.post<ConversationResult>('/conversation', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  })
+
   return response.data
 }
 

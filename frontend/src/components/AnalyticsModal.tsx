@@ -1,19 +1,54 @@
 import React from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import type { HistoryEntry, InsightsResult } from '../services/api'
 
 interface AnalyticsModalProps {
   onClose: () => void
+  insights: InsightsResult
+  history: HistoryEntry[]
+  language: 'EN' | 'HI'
 }
 
-export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({ onClose }) => {
-  // Mock data representing the stacked bars in Image 2
-  const barData = [
-    { month: 'Apr', value1: 45, value2: 35, percentage: '12.4%' },
-    { month: 'May', value1: 85, value2: 25, percentage: '18.7%' },
-    { month: 'Jun', value1: 25, value2: 25, percentage: '6.3%' },
-    { month: 'Jul', value1: 60, value2: 30, percentage: '14.9%' },
-    { month: 'Aug', value1: 35, value2: 15, percentage: '9.8%' },
-  ]
+function buildBarData(history: HistoryEntry[]) {
+  const months = new Map<string, { month: string; sales: number; expenses: number }>()
+
+  history.forEach((entry) => {
+    const date = new Date(entry.createdAt)
+    const key = `${date.getFullYear()}-${date.getMonth()}`
+    const month = date.toLocaleString('en-IN', { month: 'short' })
+    const existing = months.get(key) || { month, sales: 0, expenses: 0 }
+    existing.sales += Number(entry.totals.salesAmount || 0)
+    existing.expenses += Number(entry.totals.expenseAmount || 0)
+    months.set(key, existing)
+  })
+
+  return Array.from(months.values()).slice(-5)
+}
+
+function buildAiAdvice(insights: InsightsResult, language: 'EN' | 'HI') {
+  const balance = insights.totals.sales - insights.totals.expenses
+  if (insights.transactionCount === 0) {
+    return language === 'EN'
+      ? 'Record a few transactions and I will start surfacing business insights here.'
+      : 'कुछ ट्रांजैक्शन रिकॉर्ड करें, फिर मैं यहाँ बिजनेस इनसाइट्स दिखाऊँगा।'
+  }
+
+  if (balance >= 0) {
+    return language === 'EN'
+      ? `You are positive by ₹${Math.round(balance).toLocaleString('en-IN')}. Keep tracking daily sales to spot repeat winners.`
+      : `आप ₹${Math.round(balance).toLocaleString('en-IN')} के पॉजिटिव बैलेंस पर हैं। रोज़ की बिक्री ट्रैक करते रहें ताकि बेस्ट-सेलर दिख सकें।`
+  }
+
+  return language === 'EN'
+    ? `Expenses are ahead by ₹${Math.round(Math.abs(balance)).toLocaleString('en-IN')}. Review recent spends and tighten non-essential costs.`
+    : `खर्च ₹${Math.round(Math.abs(balance)).toLocaleString('en-IN')} से आगे हैं। हाल की लागत देखें और गैर-ज़रूरी खर्च कम करें।`
+}
+
+export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({ onClose, insights, history, language }) => {
+  const barData = React.useMemo(() => buildBarData(history), [history])
+  const peakValue = Math.max(1, ...barData.map((item) => item.sales + item.expenses))
+  const aiAdvice = buildAiAdvice(insights, language)
+  const balance = Math.max(0, insights.totals.sales - insights.totals.expenses)
 
   return (
     <AnimatePresence>
@@ -27,11 +62,13 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({ onClose }) => {
         {/* Header content matching Image 2 */}
         <div className="px-6 pt-12 pb-6 flex items-start justify-between">
           <div>
-            <p className="text-[15px] font-medium text-[#1A1A1A] mb-1">Balance</p>
+            <p className="text-[15px] font-medium text-[#1A1A1A] mb-1">
+              {language === 'EN' ? 'Balance' : 'बैलेंस'}
+            </p>
             <div className="text-[34px] font-semibold text-[#1A1A1A] tracking-tight flex items-end">
-              <span className="text-2xl pb-[2px] mr-1">$</span>
-              14 857
-              <span className="text-[#8B8B8B] text-[28px] pb-[3px]">.05</span>
+              <span className="text-2xl pb-[2px] mr-1">₹</span>
+              {Math.round(balance).toLocaleString('en-IN')}
+              <span className="text-[#8B8B8B] text-[28px] pb-[3px]">.00</span>
             </div>
           </div>
           
@@ -49,40 +86,48 @@ export const AnalyticsModal: React.FC<AnalyticsModalProps> = ({ onClose }) => {
         {/* Chart area */}
         <div className="flex-1 flex flex-col justify-center px-6 mt-4">
           <div className="flex items-end justify-between h-[300px] gap-3">
-            {barData.map((data, idx) => (
+            {barData.length > 0 ? barData.map((data, idx) => (
               <div key={idx} className="flex-1 flex flex-col items-center justify-end h-full">
-                <span className="text-[11px] font-bold text-[#1A1A1A] mb-3">{data.percentage}</span>
+                <span className="text-[11px] font-bold text-[#1A1A1A] mb-3">
+                  ₹{Math.round(data.sales - data.expenses).toLocaleString('en-IN')}
+                </span>
                 <div className="w-full flex justify-center">
                   <motion.div 
                     initial={{ height: 0 }}
                     animate={{ height: '100%' }}
                     transition={{ delay: 0.1 * idx, duration: 0.8, ease: "easeOut" }}
                     className="w-full max-w-[48px] flex flex-col justify-end gap-[4px] relative"
-                    style={{ height: `${data.value1 + data.value2}%` }}
+                    style={{ height: `${((data.sales + data.expenses) / peakValue) * 100}%` }}
                   >
                     {/* Top block */}
                     <div 
-                      className={`w-full rounded-[12px] opacity-70 ${idx === 1 || idx === 3 ? 'bg-[#E6DFD7]' : 'bg-[#E6DFD7]'}`}
-                      style={{ height: `${(data.value2 / (data.value1 + data.value2)) * 100}%` }}
+                      className="w-full rounded-[12px] opacity-70 bg-[#E6DFD7]"
+                      style={{ height: `${((data.expenses || 0) / Math.max(1, data.sales + data.expenses)) * 100}%` }}
                     ></div>
                     {/* Bottom main block */}
                     <div 
-                      className={`w-full rounded-[12px] ${idx === 1 || idx === 3 ? 'bg-[#8A9B80]' : 'bg-[#7A6452]'}`}
-                      style={{ height: `${(data.value1 / (data.value1 + data.value2)) * 100}%` }}
+                      className="w-full rounded-[12px] bg-[#8A9B80]"
+                      style={{ height: `${((data.sales || 0) / Math.max(1, data.sales + data.expenses)) * 100}%` }}
                     ></div>
                   </motion.div>
                 </div>
                 <span className="text-[12px] font-medium text-[#8B8B8B] mt-4">{data.month}</span>
               </div>
-            ))}
+            )) : (
+              <div className="w-full h-full flex items-center justify-center text-sm text-[#1A1A1A]/55">
+                {language === 'EN' ? 'No analytics yet' : 'अभी कोई एनालिटिक्स नहीं'}
+              </div>
+            )}
           </div>
         </div>
 
         {/* AI Advice Bottom Card */}
         <div className="px-6 pb-12 pt-8">
-          <p className="text-[13px] font-medium text-[#1A1A1A] opacity-80 mb-3">AI advice</p>
+          <p className="text-[13px] font-medium text-[#1A1A1A] opacity-80 mb-3">
+            {language === 'EN' ? 'AI advice' : 'AI सलाह'}
+          </p>
           <h2 className="text-3xl font-semibold text-[#1A1A1A] leading-[1.1] tracking-tight">
-            Reduce raw material spending by 10% and save ₹1,800 each month.
+            {aiAdvice}
           </h2>
         </div>
 

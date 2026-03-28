@@ -9,6 +9,7 @@ router = APIRouter()
 
 class ProcessRequest(BaseModel):
     text: str
+    userId: str | None = None
 
 class ProcessResponse(BaseModel):
     structured: bool
@@ -22,7 +23,7 @@ def process_text(request: ProcessRequest):
     if not request.text:
         raise HTTPException(status_code=400, detail="Text is required.")
     try:
-        structured_data = structure_transcript(request.text)
+        structured_data = structure_transcript(request.text, request.userId)
         return ProcessResponse(
             structured=True,
             original=request.text,

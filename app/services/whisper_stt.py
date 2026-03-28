@@ -28,7 +28,10 @@ def transcribe_with_whisper(audio_path: str) -> Dict:
     try:
         logger.info(f"Transcribing with Whisper: {audio_path}")
 
-        result = model.transcribe(audio_path)
+        prompt = "Umm, aaj maine 2 rs ke 4 samose beche, aur 5 chai 10 rupaye mein bechi. Total transaction 20 rs."
+        result = model.transcribe(audio_path, initial_prompt=prompt)
+
+
 
         text = result.get("text", "").strip()
         confidence = _estimate_confidence(result)

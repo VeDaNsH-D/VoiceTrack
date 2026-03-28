@@ -22,7 +22,7 @@ function normalizeUserId(userId) {
 
 async function processText(req, res, next) {
   try {
-    const { text, userId } = req.body || {};
+    const { text, userId, save = true } = req.body || {};
 
     if (typeof text !== "string" || !text.trim()) {
       return res.status(400).json({
@@ -48,22 +48,24 @@ async function processText(req, res, next) {
       },
     };
 
-    const rawLog = await saveRawLog(rawLogPayload);
+    if (save !== false) {
+      const rawLog = await saveRawLog(rawLogPayload);
 
-    await saveProcessedTransaction({
-      userId: normalizeUserId(userId),
-      rawText: text,
-      normalizedText,
-      rawLogId: rawLog?._id || null,
-      sales: result.sales,
-      expenses: result.expenses,
-      meta: {
-        confidence: result.meta.confidence,
-        source: result.meta.source,
-        needsClarification: result.meta.needs_clarification,
-        clarificationQuestion: result.meta.clarification_question,
-      },
-    });
+      await saveProcessedTransaction({
+        userId: normalizeUserId(userId),
+        rawText: text,
+        normalizedText,
+        rawLogId: rawLog?._id || null,
+        sales: result.sales,
+        expenses: result.expenses,
+        meta: {
+          confidence: result.meta.confidence,
+          source: result.meta.source,
+          needsClarification: result.meta.needs_clarification,
+          clarificationQuestion: result.meta.clarification_question,
+        },
+      });
+    }
 
     return res.status(200).json(result);
   } catch (error) {
@@ -149,7 +151,48 @@ async function listHistory(req, res, next) {
   }
 }
 
+async function saveTransaction(req, res, next) {
+  try {
+    const { userId, rawText, normalizedText, sales, expenses, meta } = req.body || {};
+
+    const rawLogPayload = {
+      text: rawText,
+      normalizedText,
+      source: "client-save",
+      status: "processed",
+      parseMeta: {
+        confidence: meta?.confidence || 0.9,
+        parserSource: meta?.source || "llm",
+        needsClarification: false,
+        clarificationQuestion: null,
+      },
+    };
+
+    const rawLog = await saveRawLog(rawLogPayload);
+
+    const entry = await saveProcessedTransaction({
+      userId: normalizeUserId(userId),
+      rawText,
+      normalizedText,
+      rawLogId: rawLog?._id || null,
+      sales: sales || [],
+      expenses: expenses || [],
+      meta: {
+        confidence: meta?.confidence || 0.9,
+        source: meta?.source || "llm",
+        needsClarification: false,
+        clarificationQuestion: null,
+      },
+    });
+
+    return res.status(201).json(entry);
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   processText,
   listHistory,
+  saveTransaction,
 };

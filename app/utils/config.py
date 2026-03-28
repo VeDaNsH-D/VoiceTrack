@@ -21,3 +21,4 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
 
 BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://127.0.0.1:5000")
 BACKEND_PROCESS_PATH = os.getenv("BACKEND_PROCESS_PATH", "/process-text")
+BACKEND_CHAT_PATH = os.getenv("BACKEND_CHAT_PATH", "/chat")

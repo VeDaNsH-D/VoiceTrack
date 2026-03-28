@@ -91,8 +91,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin, onBack, language }) => {
       const isNetworkIssue = axios.isAxiosError(apiError) && !apiError.response
       const message = isNetworkIssue
         ? (language === 'EN'
-            ? 'Cannot reach backend server. Start backend on http://localhost:5001 and try again.'
-            : 'बैकएंड सर्वर तक पहुंच नहीं हो रही। कृपया backend को http://localhost:5001 पर चलाकर फिर प्रयास करें।')
+            ? 'Cannot reach backend server. Start backend on http://localhost:5000 and try again.'
+            : 'बैकएंड सर्वर तक पहुंच नहीं हो रही। कृपया backend को http://localhost:5000 पर चलाकर फिर प्रयास करें।')
         : ((axios.isAxiosError(apiError) ? apiError.response?.data?.message : undefined) ||
           (language === 'EN' ? 'Authentication failed. Please try again.' : 'ऑथेंटिकेशन असफल हुआ। कृपया दोबारा कोशिश करें।'))
       setError(String(message))

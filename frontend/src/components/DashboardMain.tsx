@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { AnalyticsModal } from './AnalyticsModal.tsx'
-import { getInsights, type InsightsResult } from '../services/api'
+import { getInsights, getTransactionHistory, type HistoryEntry, type InsightsResult } from '../services/api'
 
 interface DashboardMainProps {
   userId: string
@@ -18,6 +18,7 @@ export const DashboardMain: React.FC<DashboardMainProps> = ({ userId, userName, 
     totals: { sales: 0, expenses: 0 },
     transactionCount: 0,
   })
+  const [history, setHistory] = useState<HistoryEntry[]>([])
   const finalBalance = Math.max(0, insights.totals.sales - insights.totals.expenses)
 
   useEffect(() => {
@@ -26,8 +27,13 @@ export const DashboardMain: React.FC<DashboardMainProps> = ({ userId, userName, 
     const loadInsights = async () => {
       try {
         const response = await getInsights(userId || undefined)
+        const historyResponse = await getTransactionHistory({
+          userId: userId || undefined,
+          limit: 100,
+        })
         if (mounted) {
           setInsights(response)
+          setHistory(historyResponse.transactions)
         }
       } catch {
         if (mounted) {
@@ -35,6 +41,7 @@ export const DashboardMain: React.FC<DashboardMainProps> = ({ userId, userName, 
             totals: { sales: 0, expenses: 0 },
             transactionCount: 0,
           })
+          setHistory([])
         }
       }
     }
@@ -171,7 +178,14 @@ export const DashboardMain: React.FC<DashboardMainProps> = ({ userId, userName, 
       </motion.div>
 
       {/* Analytics Modal overlay */}
-      {showAnalytics && <AnalyticsModal onClose={() => setShowAnalytics(false)} />}
+      {showAnalytics && (
+        <AnalyticsModal
+          onClose={() => setShowAnalytics(false)}
+          insights={insights}
+          history={history}
+          language={language}
+        />
+      )}
 
       {/* Removed traditional bottom nav explicitly since this is an overlay */}
     </motion.div>

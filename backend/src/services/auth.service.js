@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 async function getAuthStatus() {
   return {
     authenticated: false,
@@ -8,6 +9,12 @@ const crypto = require("crypto");
 
 const User = require("../models/user.model");
 const Business = require("../models/business.model");
+
+const ensureDatabaseReady = () => {
+    if (mongoose.connection.readyState !== 1) {
+        throw new Error("Authentication requires MongoDB. Configure MONGO_URI and restart the backend.");
+    }
+};
 
 const hashPassword = (password, salt = crypto.randomBytes(16).toString("hex")) => {
     const passwordHash = crypto.scryptSync(password, salt, 64).toString("hex");
@@ -44,6 +51,7 @@ const buildIdentityQuery = ({ email, phone }) => {
 };
 
 const createBusinessForUser = async (user) => {
+    ensureDatabaseReady();
     const business = await Business.create({
         name: buildBusinessName(user.name),
         type: "vegetable",
@@ -56,6 +64,7 @@ const createBusinessForUser = async (user) => {
 };
 
 const signupUser = async ({ name, email, phone, password }) => {
+    ensureDatabaseReady();
     const existingUser = await User.findOne(buildIdentityQuery({ email, phone }));
 
     if (existingUser) {
@@ -78,6 +87,7 @@ const signupUser = async ({ name, email, phone, password }) => {
 };
 
 const loginUser = async ({ identifier, password }) => {
+    ensureDatabaseReady();
     const query = identifier.includes("@")
         ? { email: identifier }
         : { phone: identifier };
