@@ -42,6 +42,18 @@ export const History: React.FC<HistoryProps> = ({ onNavigate }) => {
       className="h-screen bg-app-gradient flex flex-col relative overflow-hidden"
     >
       <div className="px-6 pt-12 pb-2 flex flex-col items-start justify-between z-10 w-full">
+        <div className="w-full flex justify-between items-center mb-6">
+          <button 
+            onClick={() => onNavigate('dashboard')}
+            className="w-10 h-10 bg-white bg-opacity-60 rounded-full flex items-center justify-center hover:bg-opacity-100 transition-colors shadow-sm"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+        </div>
         <div className="mb-6">
           <p className="text-[15px] font-medium text-[#1A1A1A] mb-1">History</p>
           <h1 className="text-3xl font-semibold text-[#1A1A1A] tracking-tight">
@@ -142,14 +154,22 @@ export const History: React.FC<HistoryProps> = ({ onNavigate }) => {
       </div>
 
       {/* Modern Bottom Nav */}
-      <div className="absolute bottom-0 w-full h-[100px] bg-[#161211] rounded-t-[40px] flex items-center justify-between px-10 z-50">
+      <div className="absolute bottom-0 w-full h-[100px] bg-[#161211] rounded-t-[40px] flex items-center justify-between px-16 z-50">
         <button 
-          onClick={() => onNavigate('dashboard')}
-          className="text-[#F8F5F2] opacity-60 hover:opacity-100 mt-2 transition-opacity"
+          className="text-[#F8F5F2] opacity-40 hover:opacity-100 mt-2 transition-opacity"
         >
-           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+          {/* Empty Placeholder for symmetry */}
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
+            <line x1="6" y1="8" x2="6" y2="8"></line>
+            <line x1="10" y1="8" x2="10" y2="8"></line>
+            <line x1="14" y1="8" x2="14" y2="8"></line>
+            <line x1="18" y1="8" x2="18" y2="8"></line>
+            <line x1="6" y1="12" x2="6" y2="12"></line>
+            <line x1="10" y1="12" x2="10" y2="12"></line>
+            <line x1="14" y1="12" x2="14" y2="12"></line>
+            <line x1="18" y1="12" x2="18" y2="12"></line>
+            <line x1="8" y1="16" x2="16" y2="16"></line>
           </svg>
         </button>
         

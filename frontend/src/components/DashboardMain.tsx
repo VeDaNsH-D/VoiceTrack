@@ -55,13 +55,17 @@ export const DashboardMain: React.FC<DashboardMainProps> = ({ userName, onNaviga
         animate="visible"
         className="flex-1 overflow-y-auto px-6 py-10 pb-32 relative z-10"
       >
-        {/* Top Branding matching the b logo slightly */}
-        <motion.div variants={itemVariants} className="mb-6 flex justify-start">
-           <svg viewBox="0 0 100 100" fill="none" className="w-8 h-8 text-[#1A1A1A]">
-            <path d="M20 20 H50 V60 C50 71 41 80 30 80 C24.47 80 20 75.53 20 70 V20 Z" fill="currentColor" />
-            <path d="M50 45 C66.56 45 80 58.44 80 75 C80 91.56 66.56 100 50 100 V45 Z" fill="currentColor" />
-            <path d="M50 45 L50 60 C41 60 41 50 50 45 Z" fill="#F8F5F2" />
-          </svg>
+        {/* Top Handle to Close Dashboard overlay */}
+        <motion.div variants={itemVariants} className="mb-6 flex justify-start mt-4">
+          <button 
+            onClick={() => onNavigate('voice')}
+            className="w-10 h-10 bg-white bg-opacity-60 rounded-full flex items-center justify-center hover:bg-opacity-100 transition-colors shadow-sm"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         </motion.div>
 
         {/* Greeting & Subtitle */}
@@ -129,35 +133,7 @@ export const DashboardMain: React.FC<DashboardMainProps> = ({ userName, onNaviga
       {/* Analytics Modal overlay */}
       {showAnalytics && <AnalyticsModal onClose={() => setShowAnalytics(false)} />}
 
-      {/* Modern Bottom Nav */}
-      <div className="fixed bottom-0 left-0 right-0 bg-[#161211] rounded-t-[32px] px-8 py-5 pb-8 flex justify-between items-center z-50">
-        <button className="p-2 opacity-100 hover:opacity-100 transition-opacity">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#F8F5F2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-            <polyline points="9 22 9 12 15 12 15 22"></polyline>
-          </svg>
-        </button>
-
-        <button 
-          onClick={() => onNavigate('voice')}
-          className="flex items-center justify-center text-[#F8F5F2] opacity-60 hover:opacity-100 transition-opacity"
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-             <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-          </svg>
-        </button>
-
-        <button 
-          onClick={() => onNavigate('history')}
-          className="p-2 opacity-60 hover:opacity-100 transition-opacity"
-        >
-          {/* History Icon */}
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#F8F5F2" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10"></circle>
-            <polyline points="12 6 12 12 16 14"></polyline>
-          </svg>
-        </button>
-      </div>
+      {/* Removed traditional bottom nav explicitly since this is an overlay */}
     </motion.div>
   )
 }

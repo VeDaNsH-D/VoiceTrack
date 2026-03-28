@@ -16,9 +16,14 @@ export const AIVoiceScreen: React.FC<AIVoiceScreenProps> = ({ userName, onNaviga
     >
       {/* Top Header */}
       <div className="flex items-center justify-between px-6 pt-12 pb-4">
-        <button className="w-12 h-12 bg-[#EFEBE4] rounded-full flex items-center justify-center hover:bg-[#E3DCD3] transition-colors">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="15 18 9 12 15 6"></polyline>
+        <button 
+          onClick={() => onNavigate('dashboard')}
+          className="w-12 h-12 bg-[#EFEBE4] rounded-full flex items-center justify-center hover:bg-[#E3DCD3] transition-colors shadow-sm"
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
           </svg>
         </button>
         <span className="text-[15px] font-semibold text-[#1A1A1A]">AI Assistant</span>
@@ -48,22 +53,22 @@ export const AIVoiceScreen: React.FC<AIVoiceScreenProps> = ({ userName, onNaviga
       {/* Majestic Halo AI Interface */}
       <div className="flex-1 flex items-center justify-center relative perspective-[1000px]">
         
-        {/* Core Glowing Orb */}
+        {/* Core Dark Orb */}
         <motion.div 
           animate={{ 
-            scale: [1, 1.1, 1], 
-            filter: ['blur(15px)', 'blur(25px)', 'blur(15px)'],
-            opacity: [0.7, 1, 0.7]
+            scale: [1, 1.05, 1], 
+            filter: ['blur(8px)', 'blur(16px)', 'blur(8px)'],
+            opacity: [0.9, 1, 0.9]
           }}
           transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-          className="absolute w-28 h-28 rounded-full bg-gradient-to-tr from-[#8A9B80] to-[#E6DFD7] shadow-[0_0_60px_15px_rgba(138,155,128,0.5)] z-10"
+          className="absolute w-28 h-28 rounded-full bg-gradient-to-tr from-[#0F0C0B] to-[#2B2B2B] shadow-[0_0_60px_15px_rgba(26,26,26,0.6)] z-10"
         />
 
         {/* Ring 1: Fast Axis */}
         <motion.div 
           animate={{ rotateZ: 360, rotateX: [60, 75, 60], rotateY: [0, 180, 360] }}
           transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
-          className="absolute w-56 h-56 rounded-full border-[1.5px] border-[#8A9B80] opacity-40 border-t-transparent shadow-[0_0_15px_rgba(138,155,128,0.2)]"
+          className="absolute w-56 h-56 rounded-full border-[1.5px] border-[#1A1A1A] opacity-60 border-t-transparent shadow-[0_0_20px_rgba(26,26,26,0.3)]"
           style={{ transformStyle: 'preserve-3d' }}
         />
 
@@ -89,15 +94,23 @@ export const AIVoiceScreen: React.FC<AIVoiceScreenProps> = ({ userName, onNaviga
       {/* Bottom Nav with cutout for Mic */}
       <div className="h-32 relative flex items-end">
         {/* Deep dark bottom nav background with center cutout */}
-        <div className="absolute bottom-0 w-full h-[100px] bg-[#161211] rounded-t-[40px] flex items-center justify-between px-10">
+        <div className="absolute bottom-0 w-full h-[100px] bg-[#161211] rounded-t-[40px] flex items-center justify-between px-16">
           <button 
-            onClick={() => onNavigate('dashboard')}
-            className="text-[#F8F5F2] opacity-60 hover:opacity-100 mt-2 transition-opacity"
+            className="text-[#F8F5F2] opacity-40 hover:opacity-100 mt-2 transition-opacity"
           >
+             {/* Empty Placeholder for symmetry */}
              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-              <polyline points="9 22 9 12 15 12 15 22"></polyline>
-            </svg>
+              <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
+              <line x1="6" y1="8" x2="6" y2="8"></line>
+              <line x1="10" y1="8" x2="10" y2="8"></line>
+              <line x1="14" y1="8" x2="14" y2="8"></line>
+              <line x1="18" y1="8" x2="18" y2="8"></line>
+              <line x1="6" y1="12" x2="6" y2="12"></line>
+              <line x1="10" y1="12" x2="10" y2="12"></line>
+              <line x1="14" y1="12" x2="14" y2="12"></line>
+              <line x1="18" y1="12" x2="18" y2="12"></line>
+              <line x1="8" y1="16" x2="16" y2="16"></line>
+             </svg>
           </button>
           
           <button 

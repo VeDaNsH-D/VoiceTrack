@@ -57,11 +57,27 @@ export const Landing: React.FC<LandingProps> = ({ onGetStarted, onDemo }) => {
               e.stopPropagation()
               onGetStarted()
             }}
-            className="w-full bg-[#F8F5F2] text-[#161211] py-4 rounded-2xl font-bold tracking-wide"
+            className="w-full bg-[#F8F5F2] text-[#161211] py-4 rounded-2xl font-bold tracking-wide shadow-lg"
           >
             Get Started
           </motion.button>
           
+          {/* APK Download Button */}
+          <motion.a
+            whileTap={{ scale: 0.95 }}
+            href="/voicetrace.apk"
+            download="VoiceTrace.apk"
+            onClick={(e) => e.stopPropagation()}
+            className="w-full bg-[#8A9B80] text-[#161211] py-4 rounded-2xl font-bold tracking-wide shadow-lg text-center flex items-center justify-center gap-2"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            Download APK
+          </motion.a>
+
           <motion.button
             whileTap={{ scale: 0.95 }}
             onClick={(e) => {
