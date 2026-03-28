@@ -17,39 +17,38 @@ export function LocalDemandMapDashboard() {
     const [loadingInsights, setLoadingInsights] = useState(false);
     const [error, setError] = useState("");
 
-    const loadTransactions = useCallback(async () => {
+    const loadMapPoints = useCallback(async () => {
         try {
             setLoadingMap(true);
             setError("");
 
-            const response = await axios.get(`${API_BASE}/api/transactions/history`, {
-                params: { limit: 2000 },
-            });
-
+            const response = await axios.get(`${API_BASE}/api/map-points`);
             const payload = response?.data?.data || response?.data || {};
-            const rows = Array.isArray(payload.transactions) ? payload.transactions : [];
+            const rows = Array.isArray(payload.points) ? payload.points : [];
 
-            const points = rows
-                .filter((tx) => Number.isFinite(tx?.location?.lat) && Number.isFinite(tx?.location?.lng))
-                .map((tx) => ({
-                    lat: Number(tx.location.lat),
-                    lng: Number(tx.location.lng),
-                    salesCount: Array.isArray(tx.sales) ? tx.sales.length : 0,
-                    salesAmount: Number(tx?.totals?.salesAmount || 0),
-                    label: tx?.sales?.[0]?.item || "Mixed basket",
+            const nextPoints = rows
+                .filter((point) => Number.isFinite(point?.lat) && Number.isFinite(point?.lng))
+                .map((point) => ({
+                    lat: Number(point.lat),
+                    lng: Number(point.lng),
+                    weight: Number(point.weight) || 1,
                 }));
 
-            setPoints(points);
+            setPoints(nextPoints);
+
+            if (nextPoints.length < 100) {
+                console.warn(`[LocalDemandMapDashboard] Only ${nextPoints.length} map points available; expected 100+ for dense city heatmap.`);
+            }
         } catch (_) {
-            setError("Unable to load map transactions.");
+            setError("Unable to load map points.");
         } finally {
             setLoadingMap(false);
         }
     }, []);
 
     useEffect(() => {
-        void loadTransactions();
-    }, [loadTransactions]);
+        void loadMapPoints();
+    }, [loadMapPoints]);
 
     const handleMapClick = useCallback(async ({ lat, lng }) => {
         setSelectedPoint({ lat, lng });

@@ -1,6 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CircleMarker, MapContainer, TileLayer, Tooltip, useMap, useMapEvents } from "react-leaflet";
+import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import "leaflet.heat";
 
 const DEFAULT_CENTER = [19.076, 72.8777];
 
@@ -40,44 +42,95 @@ function MapRecenter({ center }) {
     return null;
 }
 
+function HeatmapLayer({ points }) {
+    const map = useMap();
+    const heatLayerRef = useRef(null);
+
+    useEffect(() => {
+        if (!map) {
+            return;
+        }
+
+        const safePoints = Array.isArray(points)
+            ? points.filter((point) => Number.isFinite(point?.lat) && Number.isFinite(point?.lng))
+            : [];
+
+        const leafletGlobal = typeof window !== "undefined" ? window.L : null;
+        const leafletApi = leafletGlobal?.heatLayer ? leafletGlobal : L;
+
+        if (typeof leafletApi?.heatLayer !== "function") {
+            console.warn("[HeatmapLayer] leaflet.heat is not available. Skipping heatmap render.");
+            return;
+        }
+
+        if (!safePoints.length) {
+            if (heatLayerRef.current) {
+                map.removeLayer(heatLayerRef.current);
+                heatLayerRef.current = null;
+            }
+            return;
+        }
+
+        const heatData = safePoints.map((point) => {
+            const weightedValue = Math.max(0, toSafeNumber(point?.weight, 0));
+            const fallbackValue = Math.max(0, toSafeNumber(point?.salesAmount, 0));
+            const sourceWeight = weightedValue > 0 ? weightedValue : fallbackValue > 0 ? fallbackValue : 1;
+            const intensity = Math.min(sourceWeight / 500, 1);
+
+            return [point.lat, point.lng, intensity];
+        });
+
+        if (!heatLayerRef.current) {
+            heatLayerRef.current = leafletApi.heatLayer(heatData, {
+                radius: 35,
+                blur: 25,
+                maxZoom: 17,
+                minOpacity: 0.4,
+                gradient: {
+                    0.1: "#0000ff",
+                    0.3: "#00ffff",
+                    0.5: "#00ff00",
+                    0.7: "#ffff00",
+                    1.0: "#ff0000",
+                },
+            }).addTo(map);
+
+            console.debug(`[HeatmapLayer] Added heatmap layer with ${heatData.length} points.`);
+            return;
+        }
+
+        requestAnimationFrame(() => {
+            if (heatLayerRef.current) {
+                heatLayerRef.current.setLatLngs(heatData);
+                heatLayerRef.current.redraw();
+            }
+        });
+    }, [map, points]);
+
+    useEffect(() => {
+        return () => {
+            if (heatLayerRef.current) {
+                map.removeLayer(heatLayerRef.current);
+                heatLayerRef.current = null;
+            }
+        };
+    }, [map]);
+
+    return null;
+}
+
 function getWeight(point) {
+    const directWeight = Math.max(0, toSafeNumber(point?.weight, 0));
+    if (directWeight > 0) {
+        return directWeight;
+    }
+
     const salesCount = Math.max(1, toSafeNumber(point?.salesCount, 1));
     const salesAmount = Math.max(0, toSafeNumber(point?.salesAmount, 0));
     return salesCount + salesAmount / 400;
 }
 
-function getMarkerPalette(weight) {
-    if (weight < 4) {
-        return {
-            core: "#3b82f6",
-            glow: "#60a5fa",
-            level: "low",
-        };
-    }
-
-    if (weight < 9) {
-        return {
-            core: "#f97316",
-            glow: "#fb923c",
-            level: "medium",
-        };
-    }
-
-    return {
-        core: "#ef4444",
-        glow: "#f87171",
-        level: "high",
-    };
-}
-
-function buildTooltipLabel(point) {
-    const label = String(point?.label || point?.topItem || "Demand hotspot");
-    const salesAmount = Math.round(Math.max(0, toSafeNumber(point?.salesAmount, 0)));
-    return `${label} - Rs${salesAmount} sales`;
-}
-
 export function MapView({ points = [], onMapClick, selectedPoint }) {
-    const [hoveredKey, setHoveredKey] = useState(null);
     const [userLocation, setUserLocation] = useState(null);
     const [loadingLocation, setLoadingLocation] = useState(false);
     const [errorLocation, setErrorLocation] = useState(null);
@@ -133,20 +186,14 @@ export function MapView({ points = [], onMapClick, selectedPoint }) {
         () =>
             points
                 .filter((point) => Number.isFinite(point?.lat) && Number.isFinite(point?.lng))
-                .map((point, index) => {
+                .map((point) => {
                     const weight = getWeight(point);
-                    const palette = getMarkerPalette(weight);
-                    const baseRadius = weight < 4 ? 4 : weight < 9 ? 8 : 12;
-                    const key = `${Number(point.lat).toFixed(6)}-${Number(point.lng).toFixed(6)}-${index}`;
 
                     return {
-                        key,
                         lat: Number(point.lat),
                         lng: Number(point.lng),
                         weight,
-                        baseRadius,
-                        palette,
-                        label: buildTooltipLabel(point),
+                        salesAmount: Math.max(0, toSafeNumber(point?.salesAmount, 0)),
                     };
                 }),
         [points]
@@ -205,50 +252,7 @@ export function MapView({ points = [], onMapClick, selectedPoint }) {
 
                 <MapClickHandler onMapClick={onMapClick} />
 
-                {plottedPoints.map((point) => {
-                    const isHovered = hoveredKey === point.key;
-                    const coreRadius = isHovered ? point.baseRadius + 1.5 : point.baseRadius;
-                    const glowRadius = isHovered ? point.baseRadius * 2.3 : point.baseRadius * 2;
-
-                    return (
-                        <React.Fragment key={point.key}>
-                            <CircleMarker
-                                center={[point.lat, point.lng]}
-                                radius={glowRadius}
-                                pathOptions={{
-                                    color: point.palette.glow,
-                                    weight: 0,
-                                    fillColor: point.palette.glow,
-                                    fillOpacity: 0.16,
-                                }}
-                            />
-
-                            <CircleMarker
-                                center={[point.lat, point.lng]}
-                                radius={coreRadius}
-                                eventHandlers={{
-                                    mouseover: () => setHoveredKey(point.key),
-                                    mouseout: () => setHoveredKey(null),
-                                    click: () => {
-                                        if (typeof onMapClick === "function") {
-                                            onMapClick({ lat: point.lat, lng: point.lng });
-                                        }
-                                    },
-                                }}
-                                pathOptions={{
-                                    color: "#ffffff",
-                                    weight: 1,
-                                    fillColor: point.palette.core,
-                                    fillOpacity: isHovered ? 0.95 : 0.8,
-                                }}
-                            >
-                                <Tooltip direction="top" offset={[0, -8]} opacity={1}>
-                                    <div className="text-xs font-medium text-slate-700">{point.label}</div>
-                                </Tooltip>
-                            </CircleMarker>
-                        </React.Fragment>
-                    );
-                })}
+                <HeatmapLayer points={plottedPoints} />
 
                 {selectedPoint && Number.isFinite(selectedPoint?.lat) && Number.isFinite(selectedPoint?.lng) && (
                     <>

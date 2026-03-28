@@ -328,6 +328,29 @@ async function getAreaInsights({ lat, lng, radiusKm = 2 }) {
     };
 }
 
+async function getMapPoints() {
+    const transactions = await Transaction.find({
+        "location.lat": { $ne: null },
+        "location.lng": { $ne: null },
+    })
+        .select("location totals")
+        .lean();
+
+    return transactions
+        .filter((tx) => Number.isFinite(tx?.location?.lat) && Number.isFinite(tx?.location?.lng))
+        .map((tx) => {
+            const salesAmount = Math.max(0, toNumber(tx?.totals?.salesAmount));
+            const fallbackWeight = salesAmount > 0 ? salesAmount : 1;
+
+            return {
+                lat: Number(tx.location.lat),
+                lng: Number(tx.location.lng),
+                weight: fallbackWeight,
+            };
+        });
+}
+
 module.exports = {
     getAreaInsights,
+    getMapPoints,
 };

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Landing } from './components/Landing'
 import { Auth } from './components/Auth'
-import { History } from './components/History'
+import { HistoryLedger } from './components/HistoryLedger'
 import { DashboardMain } from './components/DashboardMain'
 import { AIInsightsPage } from './components/AIInsightsPage'
 import { AIVoiceScreen } from './components/AIVoiceScreen'
@@ -201,7 +201,7 @@ export function App() {
             exit={{ opacity: 0 }}
             className="flex-1 overflow-hidden h-full relative"
           >
-            <History userId={session?.userId || ''} onToggleSidebar={toggleSidebar} language={language} />
+            <HistoryLedger userId={session?.userId || ''} onToggleSidebar={toggleSidebar} language={language} />
           </motion.div>
         )}
 

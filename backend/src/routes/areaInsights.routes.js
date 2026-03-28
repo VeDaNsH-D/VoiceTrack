@@ -1,8 +1,28 @@
 const express = require("express");
 const { sendSuccess, sendError } = require("../utils/apiResponse");
-const { getAreaInsights } = require("../services/areaInsights.service");
+const { getAreaInsights, getMapPoints } = require("../services/areaInsights.service");
 
 const router = express.Router();
+
+router.get("/map-points", async (req, res) => {
+    try {
+        const mapPoints = await getMapPoints();
+
+        return sendSuccess(
+            res,
+            {
+                points: mapPoints,
+                count: mapPoints.length,
+            },
+            "Map points fetched"
+        );
+    } catch (error) {
+        return sendError(res, "Failed to fetch map points", 500, {
+            code: "MAP_POINTS_FAILED",
+            details: error?.message || "unknown_error",
+        });
+    }
+});
 
 router.get("/area-insights", async (req, res) => {
     try {
