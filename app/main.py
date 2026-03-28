@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import process, stt
+from app.routes import tts
 from app.utils.logger import logger
 
 app = FastAPI()
@@ -19,3 +20,4 @@ def on_startup():
 
 app.include_router(stt.router)
 app.include_router(process.router)
+app.include_router(tts.router)
