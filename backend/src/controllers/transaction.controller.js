@@ -86,12 +86,13 @@ async function listHistory(req, res, next) {
 
     const allTransactions = await listTransactions();
     const normalizedUserId = typeof userId === "string" ? userId.trim() : "";
+    const shouldFilterByUser = normalizedUserId ? mongoose.Types.ObjectId.isValid(normalizedUserId) : false;
     const start = startDate ? new Date(startDate) : null;
     const end = endDate ? new Date(endDate) : null;
 
     const filtered = allTransactions
       .filter((entry) => {
-        if (normalizedUserId) {
+        if (shouldFilterByUser) {
           const entryUserId = entry.userId
             ? String(entry.userId._id || entry.userId)
             : "";

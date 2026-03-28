@@ -4,7 +4,6 @@ import { blobToWav, getAudioPermission, startRecording, stopRecording } from '..
 import { FiMic, FiSquare } from 'react-icons/fi'
 import {
   sendConversationAudio,
-  saveStructuredTransaction,
   type ConversationResult,
   type ConversationStructuredData,
 } from '../services/api'
@@ -43,6 +42,21 @@ function buildStructuredSummary(structuredData: ConversationStructuredData | nul
     .join(' | ')
 }
 
+function highlightNumbers(text: string): React.ReactNode {
+  return text
+    .split(/(\d+(?:\.\d+)?)/g)
+    .map((part, index) => {
+      if (/^\d+(?:\.\d+)?$/.test(part)) {
+        return (
+          <span key={`${part}-${index}`} className="bg-[#F85F54]/15 text-[#A0342B] font-semibold px-1 rounded">
+            {part}
+          </span>
+        )
+      }
+      return <span key={`${part}-${index}`}>{part}</span>
+    })
+}
+
 export const AIVoiceScreen: React.FC<AIVoiceScreenProps> = ({ userId, userName, onToggleSidebar, language }) => {
   const [isListening, setIsListening] = React.useState(false)
   const [isProcessing, setIsProcessing] = React.useState(false)
@@ -56,7 +70,6 @@ export const AIVoiceScreen: React.FC<AIVoiceScreenProps> = ({ userId, userName, 
   const mediaRecorderRef = React.useRef<MediaRecorder | null>(null)
   const streamRef = React.useRef<MediaStream | null>(null)
   const audioReplyRef = React.useRef<HTMLAudioElement | null>(null)
-  const savedConversationKeysRef = React.useRef<Set<string>>(new Set())
 
   React.useEffect(() => {
     return () => {
@@ -99,33 +112,6 @@ export const AIVoiceScreen: React.FC<AIVoiceScreenProps> = ({ userId, userName, 
       setAssistantReply(result.assistant.reply)
       setStructuredSummary(buildStructuredSummary(result.structured_data, language))
       setShouldStartNew(false)
-
-      const saveKey = JSON.stringify({
-        userId: userId || 'guest-user',
-        transcript: result.transcript,
-        structuringInput: result.structuring_input,
-        structuredData: result.structured_data,
-      })
-
-      if (
-        result.conversation_state.finalized &&
-        result.structured_data &&
-        !savedConversationKeysRef.current.has(saveKey)
-      ) {
-        try {
-          await saveStructuredTransaction({
-            userId: userId || 'guest-user',
-            rawText: result.transcript,
-            normalizedText: result.structuring_input,
-            sales: result.structured_data.sales || [],
-            expenses: result.structured_data.expenses || [],
-            meta: result.structured_data.meta,
-          })
-          savedConversationKeysRef.current.add(saveKey)
-        } catch (err) {
-          console.error('Failed to save finalized transaction:', err)
-        }
-      }
 
       if (result.assistant.audio_needed && result.assistant.audio_url) {
         playAssistantReply(result.assistant.audio_url)
@@ -244,6 +230,20 @@ export const AIVoiceScreen: React.FC<AIVoiceScreenProps> = ({ userId, userName, 
             <p className="text-[#1A1A1A]/70">{transcript || (language === 'EN' ? 'No transcript yet.' : 'अभी कोई ट्रांसक्रिप्ट नहीं।')}</p>
           </div>
 
+          {conversationResult?.stt.preprocessing?.normalized_text && (
+            <div className="rounded-2xl bg-[#FAF7F2] border border-[#E7DED3] px-4 py-3 text-sm text-[#1A1A1A]">
+              <p className="font-semibold mb-1">{language === 'EN' ? 'Normalized text' : 'नॉर्मलाइज़्ड टेक्स्ट'}</p>
+              <p className="text-[#1A1A1A]/80 leading-relaxed">
+                {highlightNumbers(conversationResult.stt.preprocessing.normalized_text)}
+              </p>
+              {!!conversationResult.stt.preprocessing.applied_steps?.length && (
+                <p className="mt-2 text-xs text-[#1A1A1A]/55">
+                  {language === 'EN' ? 'Applied:' : 'लागू किया गया:'} {conversationResult.stt.preprocessing.applied_steps.join(', ')}
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="rounded-2xl bg-[#161211] text-[#F8F5F2] px-4 py-3 text-sm">
             <p className="font-semibold mb-1">{language === 'EN' ? 'Assistant reply' : 'सहायक का जवाब'}</p>
             <p>{assistantReply || (language === 'EN' ? 'Your spoken reply will appear here.' : 'आपके लिए बोला गया जवाब यहाँ दिखेगा।')}</p>
@@ -265,6 +265,32 @@ export const AIVoiceScreen: React.FC<AIVoiceScreenProps> = ({ userId, userName, 
               <p>
                 {language === 'EN' ? 'Started fresh:' : 'नई शुरुआत:'} {conversationResult.conversation_state.started_new ? 'Yes' : 'No'}
               </p>
+              <p>
+                {language === 'EN' ? 'Saved to history:' : 'इतिहास में सेव:'} {conversationResult.conversation_state.saved_to_history ? 'Yes' : 'No'}
+              </p>
+              <p>
+                {language === 'EN' ? 'STT source:' : 'STT स्रोत:'} {(conversationResult.stt.source || '-').toUpperCase()}
+              </p>
+              <p>
+                {language === 'EN' ? 'Pipeline confidence:' : 'पाइपलाइन कॉन्फिडेंस:'} {((conversationResult.stt.confidence || 0) * 100).toFixed(0)}%
+              </p>
+              {typeof conversationResult.stt.confidence_engine?.rule_consistency === 'number' && (
+                <p>
+                  {language === 'EN' ? 'Rule consistency:' : 'रूल कंसिस्टेंसी:'} {(conversationResult.stt.confidence_engine.rule_consistency * 100).toFixed(0)}%
+                </p>
+              )}
+              {conversationResult.stt.quality_gate?.reason && (
+                <p>
+                  {language === 'EN' ? 'Quality gate:' : 'क्वालिटी गेट:'} {conversationResult.stt.quality_gate.reason}
+                </p>
+              )}
+              {conversationResult.conversation_state.requires_confirmation && (
+                <div className="mt-2 rounded-xl border border-[#F85F54]/35 bg-[#F85F54]/10 px-3 py-2 text-[#A0342B]">
+                  {language === 'EN'
+                    ? 'Low confidence detected. Please confirm the interpreted transaction before continuing.'
+                    : 'कम कॉन्फिडेंस मिला है। आगे बढ़ने से पहले कृपया पहचानी गई ट्रांजैक्शन की पुष्टि करें।'}
+                </div>
+              )}
               {conversationResult.assistant.audio_needed && conversationResult.assistant.audio_url ? (
                 <audio src={conversationResult.assistant.audio_url} controls className="w-full mt-2" />
               ) : (

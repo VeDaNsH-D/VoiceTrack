@@ -4,6 +4,7 @@ import soundfile as sf
 import noisereduce as nr
 import webrtcvad
 import subprocess
+from uuid import uuid4
 from scipy.io import wavfile
 from app.utils.config import TEMP_AUDIO_DIR, CLEANED_AUDIO_FILENAME
 from app.utils.logger import logger
@@ -36,11 +37,17 @@ def apply_vad(audio: np.ndarray, sr: int) -> np.ndarray:
         pcm = (frame * 32767).astype(np.int16).tobytes()
         if vad.is_speech(pcm, sr):
             voiced_audio.extend(frame)
+    if not voiced_audio:
+        logger.warning("VAD removed all frames. Using original signal.")
+        return audio
     return np.array(voiced_audio, dtype=np.float32)
 
 def normalize_audio(audio: np.ndarray) -> np.ndarray:
     logger.info("Normalizing audio")
-    return audio / np.max(np.abs(audio))
+    peak = float(np.max(np.abs(audio))) if audio.size else 0.0
+    if peak <= 1e-8:
+        return audio
+    return audio / peak
 
 def preprocess_audio(input_path: str) -> str:
     """
@@ -48,14 +55,21 @@ def preprocess_audio(input_path: str) -> str:
     """
     logger.info(f"Preprocessing audio: {input_path}")
     os.makedirs(TEMP_AUDIO_DIR, exist_ok=True)
-    temp_wav = os.path.join(TEMP_AUDIO_DIR, 'converted.wav')
+    temp_id = uuid4().hex
+    temp_wav = os.path.join(TEMP_AUDIO_DIR, f'converted_{temp_id}.wav')
     convert_audio(input_path, temp_wav)
     sr, audio = wavfile.read(temp_wav)
     audio = audio.astype(np.float32) / 32768.0
     audio = reduce_noise(audio, sr)
     audio = apply_vad(audio, sr)
     audio = normalize_audio(audio)
-    cleaned_path = os.path.join(TEMP_AUDIO_DIR, CLEANED_AUDIO_FILENAME)
+    cleaned_path = os.path.join(TEMP_AUDIO_DIR, f'{temp_id}_{CLEANED_AUDIO_FILENAME}')
     sf.write(cleaned_path, audio, sr)
     logger.info(f"Cleaned audio saved at {cleaned_path}")
+
+    try:
+        os.remove(temp_wav)
+    except OSError:
+        logger.warning("Could not delete temporary converted audio: %s", temp_wav)
+
     return cleaned_path

@@ -57,13 +57,15 @@ function getUserIdFilter(userId) {
     return new mongoose.Types.ObjectId(userId);
   }
 
-  return userId;
+  return null;
 }
 
 function buildBaseFilter(userId, timeRange) {
-  const filter = {
-    userId: getUserIdFilter(userId),
-  };
+  const filter = {};
+  const normalizedUserId = getUserIdFilter(userId);
+  if (normalizedUserId) {
+    filter.userId = normalizedUserId;
+  }
 
   const dateRange = getDateRange(timeRange);
 

@@ -127,6 +127,27 @@ export interface ConversationResult {
   stt: {
     source?: string
     confidence?: number
+    raw_text?: string
+    quality_gate?: {
+      gate_passed?: boolean
+      chosen_provider?: string
+      reason?: string
+      needs_confirmation?: boolean
+      sarvam?: unknown
+      whisper?: unknown
+    }
+    preprocessing?: {
+      raw_text?: string
+      normalized_text?: string
+      highlighted_numbers?: string[]
+      applied_steps?: string[]
+    }
+    confidence_engine?: {
+      stt_confidence?: number
+      rule_consistency?: number
+      pattern_match?: number
+      final?: number
+    }
     debug?: unknown
   }
   structured_data: ConversationStructuredData | null
@@ -134,6 +155,8 @@ export interface ConversationResult {
     clarification_pending: boolean
     finalized: boolean
     started_new: boolean
+    requires_confirmation?: boolean
+    saved_to_history?: boolean
   }
   assistant: {
     reply: string

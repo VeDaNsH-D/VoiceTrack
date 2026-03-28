@@ -1,6 +1,7 @@
 import os
 import shutil
 from uuid import uuid4
+import requests
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
 from app.services.conversation_state import (
@@ -14,7 +15,7 @@ from app.services.stt_pipeline import run_stt_pipeline
 from app.services.tts_service import text_to_speech
 from app.routes.tts import build_audio_url
 from app.utils.logger import logger
-from app.utils.config import TEMP_AUDIO_DIR
+from app.utils.config import BACKEND_BASE_URL, BACKEND_SAVE_PATH, TEMP_AUDIO_DIR
 
 router = APIRouter()
 
@@ -28,6 +29,7 @@ def root():
         "endpoints": {
             "stt": "POST /stt",
             "sttCompat": "POST /process-text/stt",
+            "uploadAudio": "POST /upload-audio",
             "conversation": "POST /conversation",
             "process": "POST /process",
             "processCompat": "POST /process-text",
@@ -72,6 +74,7 @@ async def handle_stt_upload(file: UploadFile) -> JSONResponse:
 
 @router.post("/stt")
 @router.post("/process-text/stt")
+@router.post("/upload-audio")
 async def stt(file: UploadFile = File(...)):
     return await handle_stt_upload(file)
 
@@ -142,6 +145,21 @@ def _is_finalized_structured_data(structured_data) -> bool:
         return False
     meta = structured_data.get("meta") if isinstance(structured_data, dict) else {}
     return not bool((meta or {}).get("needs_clarification"))
+
+
+def _requires_low_confidence_confirmation(stt_result, structured_data) -> bool:
+    quality_gate = stt_result.get("quality_gate") if isinstance(stt_result, dict) else {}
+    confidence_engine = stt_result.get("confidence_engine") if isinstance(stt_result, dict) else {}
+
+    final_confidence = float((confidence_engine or {}).get("final") or stt_result.get("confidence") or 0.0)
+    quality_needs_confirmation = bool((quality_gate or {}).get("needs_confirmation"))
+
+    if isinstance(structured_data, dict):
+        meta = structured_data.get("meta") or {}
+        if meta.get("needs_clarification"):
+            return False
+
+    return quality_needs_confirmation or final_confidence < 0.6
 
 
 def _looks_like_short_clarification_answer(transcript: str) -> bool:
@@ -215,7 +233,6 @@ def _update_pending_state(user_id: str, transcript: str, structuring_input: str,
     needs_clarification = bool((meta or {}).get("needs_clarification"))
 
     if needs_clarification:
-        already_pending = bool(existing_state.get("awaiting_clarification"))
         set_pending_conversation(
             user_id,
             {
@@ -224,13 +241,38 @@ def _update_pending_state(user_id: str, transcript: str, structuring_input: str,
                 "structuring_input": structuring_input,
                 "clarification_question": str((meta or {}).get("clarification_question") or "").strip(),
                 "awaiting_clarification": True,
-                "clarification_turn_count": int(existing_state.get("clarification_turn_count") or 0) + (1 if already_pending else 0),
+                "clarification_turn_count": int(existing_state.get("clarification_turn_count") or 0) + 1,
             },
         )
         return True
 
     clear_pending_conversation(user_id)
     return False
+
+
+def _persist_finalized_transaction(user_id: str, transcript: str, normalized_text: str, structured_data) -> bool:
+    if not isinstance(structured_data, dict):
+        return False
+
+    backend_url = f"{BACKEND_BASE_URL.rstrip('/')}{BACKEND_SAVE_PATH}"
+    payload = {
+        "userId": str(user_id or "").strip(),
+        "rawText": transcript,
+        "normalizedText": normalized_text,
+        "sales": structured_data.get("sales") or [],
+        "expenses": structured_data.get("expenses") or [],
+        "meta": structured_data.get("meta") or {},
+    }
+
+    try:
+        response = requests.post(backend_url, json=payload, timeout=25)
+        if response.status_code >= 400:
+            logger.error("Failed to persist conversation transaction (%s): %s", response.status_code, response.text)
+            return False
+        return True
+    except Exception as exc:
+        logger.error("Conversation transaction persistence failed: %s", exc)
+        return False
 
 
 @router.post("/conversation")
@@ -284,6 +326,13 @@ async def conversation(
         if not assistant_reply:
             raise HTTPException(status_code=502, detail="Conversation reply was empty.")
 
+        requires_confirmation = _requires_low_confidence_confirmation(stt_result, structured_data)
+        if requires_confirmation and not clarification_pending:
+            assistant_reply = (
+                f"{assistant_reply} "
+                "Kripya confirm kariye ki maine aapki baat sahi samjhi hai."
+            ).strip()
+
         reply_audio_path = await text_to_speech(assistant_reply)
         audio_url = build_audio_url(request, reply_audio_path) if reply_audio_path else ""
         audio_needed = bool(reply_audio_path)
@@ -292,6 +341,14 @@ async def conversation(
             logger.warning("Reply audio generation unavailable for user: %s", user_id)
 
         finalized = _is_finalized_structured_data(structured_data)
+        saved_to_history = False
+        if finalized:
+            saved_to_history = _persist_finalized_transaction(
+                user_id=user_id,
+                transcript=transcript,
+                normalized_text=structuring_input,
+                structured_data=structured_data,
+            )
 
         response_payload = {
             "user_id": user_id,
@@ -300,6 +357,10 @@ async def conversation(
             "stt": {
                 "source": stt_result.get("source"),
                 "confidence": stt_result.get("confidence"),
+                "raw_text": stt_result.get("raw_text"),
+                "quality_gate": stt_result.get("quality_gate"),
+                "preprocessing": stt_result.get("preprocessing"),
+                "confidence_engine": stt_result.get("confidence_engine"),
                 "debug": stt_result.get("debug"),
             },
             "structured_data": structured_data,
@@ -307,6 +368,8 @@ async def conversation(
                 "clarification_pending": clarification_pending,
                 "finalized": finalized,
                 "started_new": started_new,
+                "requires_confirmation": requires_confirmation,
+                "saved_to_history": saved_to_history,
             },
             "assistant": {
                 "reply": assistant_reply,
