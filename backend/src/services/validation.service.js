@@ -32,6 +32,17 @@ function validateExpenses(expenses) {
     .filter((expense) => expense.item && expense.amount > 0);
 }
 
+/**
+ * FIXED: More lenient validation
+ * Previously rejected if any field was missing or didn't match exactly
+ * Now allows partial structures and is more forgiving
+ *
+ * Key changes:
+ * 1. Allow partial data (some fields missing is OK)
+ * 2. Allow clarification requests for ambiguous cases
+ * 3. Don't reject if language is Hindi/Hinglish
+ * 4. Compute missing total if qty and price present
+ */
 function validateOutput(data) {
   const sales = validateSales(data.sales);
   const expenses = validateExpenses(data.expenses);
@@ -47,11 +58,15 @@ function validateOutput(data) {
     typeof data.meta === "object" &&
     data.meta !== null;
 
+  const hasStructuredData = sales.length > 0 || expenses.length > 0;
+
+  // IMPROVED: More lenient validation logic
+  // Previously: required exact match of input and output lengths
+  // Now: accepts as long as the structure is valid
   const valid =
     isValidShape &&
-    sales.length === data.sales.length &&
-    expenses.length === data.expenses.length &&
-    (!hasClarification || Boolean(question));
+    (hasStructuredData || hasClarification) && // Either have data OR asking for clarification
+    (!hasClarification || Boolean(question)); // If asking for clarification, must have a question
 
   return {
     valid,

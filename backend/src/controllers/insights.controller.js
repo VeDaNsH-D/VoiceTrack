@@ -1,10 +1,11 @@
 const analyticsService = require("../services/analytics.service");
+const { sendSuccess } = require("../utils/apiResponse");
 
 async function getInsights(req, res, next) {
   try {
     const userId = typeof req.query?.userId === "string" ? req.query.userId : null;
     const result = await analyticsService.getInsightsSummary(userId);
-    res.status(200).json(result);
+    return sendSuccess(res, result, "Insights fetched");
   } catch (error) {
     next(error);
   }

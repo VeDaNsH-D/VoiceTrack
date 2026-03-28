@@ -7,6 +7,7 @@ import requests
 
 from app.utils.config import BACKEND_BASE_URL, BACKEND_CHAT_PATH, OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_MODEL
 from app.utils.logger import logger
+from app.services.conversation_state import get_pending_conversation
 
 
 def _has_finalized_transaction(structured_data: Optional[Dict[str, Any]]) -> bool:
@@ -32,6 +33,10 @@ def _detect_language_style(transcript: str) -> str:
         "maine",
         "becha",
         "bechi",
+        "haan",
+        "han",
+        "nahi",
+        "nahin",
         "kitna",
         "kitni",
         "rupaye",
@@ -50,7 +55,8 @@ def _safe_number(value: Any) -> str:
         return "0"
     if isinstance(value, (int, float)):
         return str(int(value) if float(value).is_integer() else round(float(value), 2))
-    cleaned = "".join(ch for ch in str(value or "") if ch.isdigit() or ch == ".")
+    cleaned = "".join(ch for ch in str(value or "")
+                      if ch.isdigit() or ch == ".")
     return cleaned or "0"
 
 
@@ -111,6 +117,56 @@ def _build_specific_clarification_question(transcript: str, structured_data: Opt
     return "Please restate the transaction clearly with item, quantity, and amount."
 
 
+def _normalize_text_for_compare(text: str) -> str:
+    return " ".join("".join(ch.lower() if ch.isalnum() or ch.isspace() else " " for ch in str(text or "")).split())
+
+
+def _questions_are_similar(current_question: str, previous_question: str) -> bool:
+    current = _normalize_text_for_compare(current_question)
+    previous = _normalize_text_for_compare(previous_question)
+    if not current or not previous:
+        return False
+    return current == previous or current in previous or previous in current
+
+
+def _build_progressive_clarification_question(
+    transcript: str,
+    structured_data: Optional[Dict[str, Any]],
+    pending_state: Optional[Dict[str, Any]],
+) -> str:
+    style = _detect_language_style(transcript)
+    base_question = _build_specific_clarification_question(
+        transcript, structured_data)
+
+    turn_count = int((pending_state or {}).get(
+        "clarification_turn_count") or 0)
+    if turn_count <= 1:
+        return base_question
+
+    if style in {"hindi", "hinglish"}:
+        prefixes = [
+            "Samjha. Bas ek detail aur:",
+            "Thanks, almost done. Bas yeh clear kariye:",
+            "Final confirm karte hain:",
+        ]
+    else:
+        prefixes = [
+            "Got it. One more detail:",
+            "Thanks, almost done. Please clarify:",
+            "Final confirmation:",
+        ]
+
+    prefix = prefixes[min(turn_count - 2, len(prefixes) - 1)]
+    return f"{prefix} {base_question}"
+
+
+def _pick_variant(transcript: str, variants: List[str]) -> str:
+    if not variants:
+        return ""
+    index = sum(ord(ch) for ch in str(transcript or "")) % len(variants)
+    return variants[index]
+
+
 def _build_grounded_reply(transcript: str, structured_data: Optional[Dict[str, Any]]) -> str:
     sales = (structured_data or {}).get("sales") or []
     expenses = (structured_data or {}).get("expenses") or []
@@ -135,9 +191,19 @@ def _build_grounded_reply(transcript: str, structured_data: Optional[Dict[str, A
 
         joined = ", ".join(parts)
         if style == "hindi":
-            return f"ठीक है, मैंने नोट किया: {joined}. कुल बिक्री लगभग {_safe_number(total_sales)} रुपये।"
+            variants = [
+                f"ठीक है, मैंने नोट किया: {joined}. कुल बिक्री लगभग {_safe_number(total_sales)} रुपये।",
+                f"समझ गया, एंट्री कर दी: {joined}. कुल बिक्री करीब {_safe_number(total_sales)} रुपये।",
+                f"नोट हो गया: {joined}. अभी तक कुल बिक्री {_safe_number(total_sales)} रुपये है।",
+            ]
+            return _pick_variant(transcript, variants)
         if style == "hinglish":
-            return f"Theek hai, maine note kiya: {joined}. Total sale approx {_safe_number(total_sales)} rupaye."
+            variants = [
+                f"Theek hai, maine note kiya: {joined}. Total sale approx {_safe_number(total_sales)} rupaye.",
+                f"Done, entry save kar di: {joined}. Total sale around {_safe_number(total_sales)} rupaye.",
+                f"Samjha, yeh record kar liya: {joined}. Abhi total sale {_safe_number(total_sales)} rupaye hai.",
+            ]
+            return _pick_variant(transcript, variants)
         return f"Okay, noted: {joined}. Total sales are about {_safe_number(total_sales)} rupees."
 
     if expenses:
@@ -157,9 +223,19 @@ def _build_grounded_reply(transcript: str, structured_data: Optional[Dict[str, A
 
         joined = ", ".join(parts)
         if style == "hindi":
-            return f"ठीक है, खर्च नोट कर लिया: {joined}. कुल खर्च {_safe_number(total_expense)} रुपये।"
+            variants = [
+                f"ठीक है, खर्च नोट कर लिया: {joined}. कुल खर्च {_safe_number(total_expense)} रुपये।",
+                f"समझ गया, खर्च एंट्री कर दी: {joined}. कुल खर्च {_safe_number(total_expense)} रुपये।",
+                f"नोट हो गया: {joined}. अभी तक कुल खर्च {_safe_number(total_expense)} रुपये है।",
+            ]
+            return _pick_variant(transcript, variants)
         if style == "hinglish":
-            return f"Theek hai, expense note kar liya: {joined}. Total expense {_safe_number(total_expense)} rupaye."
+            variants = [
+                f"Theek hai, expense note kar liya: {joined}. Total expense {_safe_number(total_expense)} rupaye.",
+                f"Done, expense entry save kar di: {joined}. Total expense {_safe_number(total_expense)} rupaye.",
+                f"Samjha, yeh kharcha record ho gaya: {joined}. Abhi total expense {_safe_number(total_expense)} rupaye hai.",
+            ]
+            return _pick_variant(transcript, variants)
         return f"Okay, noted expense: {joined}. Total expense is {_safe_number(total_expense)} rupees."
 
     return transcript.strip()
@@ -197,7 +273,8 @@ def _generate_openai_grounded_reply(transcript: str, structured_data: Optional[D
     if not OPENAI_API_KEY:
         return None
 
-    system_prompt, user_prompt = _build_llm_payload(transcript, structured_data)
+    system_prompt, user_prompt = _build_llm_payload(
+        transcript, structured_data)
     headers = {
         "Authorization": f"Bearer {OPENAI_API_KEY}",
         "Content-Type": "application/json",
@@ -213,9 +290,11 @@ def _generate_openai_grounded_reply(transcript: str, structured_data: Optional[D
 
     try:
         base_url = OPENAI_BASE_URL.rstrip("/")
-        response = requests.post(f"{base_url}/chat/completions", headers=headers, json=body, timeout=12)
+        response = requests.post(
+            f"{base_url}/chat/completions", headers=headers, json=body, timeout=12)
         if response.status_code >= 400:
-            logger.warning("OpenAI grounded reply failed (%s): %s", response.status_code, response.text)
+            logger.warning("OpenAI grounded reply failed (%s): %s",
+                           response.status_code, response.text)
             return None
 
         content = (
@@ -267,26 +346,39 @@ def _build_llm_message(transcript: str, structured_data: Optional[Dict[str, Any]
             lines.append(f"Ask this follow-up naturally: {question}")
     else:
         lines.append("The transaction appears complete.")
-        lines.append("Reply with a short natural acknowledgment confirming exactly what was understood from the parsed fields.")
-        lines.append("For sales, mention the quantity first and the per-unit price second only if needed.")
-        lines.append('Example style: "Theek hai, 2 chai 4 rupaye ki note kar li."')
+        lines.append(
+            "Reply with a short natural acknowledgment confirming exactly what was understood from the parsed fields.")
+        lines.append(
+            "For sales, mention the quantity first and the per-unit price second only if needed.")
+        lines.append(
+            'Example style: "Theek hai, 2 chai 4 rupaye ki note kar li."')
 
-    lines.append("Reply in the same language as the user. Keep it concise and voice-friendly.")
+    lines.append(
+        "Reply in the same language as the user. Keep it concise and voice-friendly.")
     return "\n".join(lines)
 
 
-def _build_clarification_reply(transcript: str, structured_data: Optional[Dict[str, Any]]) -> str:
+def _build_clarification_reply_with_context(
+    user_id: str,
+    transcript: str,
+    structured_data: Optional[Dict[str, Any]],
+) -> str:
     meta = (structured_data or {}).get("meta") or {}
     question = str(meta.get("clarification_question") or "").strip()
+    pending_state = get_pending_conversation(user_id)
+    previous_question = str((pending_state or {}).get(
+        "clarification_question") or "").strip()
 
     if question:
+        if previous_question and _questions_are_similar(question, previous_question):
+            return _build_progressive_clarification_question(transcript, structured_data, pending_state)
         return question
 
     llm_reply = _generate_openai_grounded_reply(transcript, structured_data)
     if llm_reply:
         return llm_reply
 
-    return _build_specific_clarification_question(transcript, structured_data)
+    return _build_progressive_clarification_question(transcript, structured_data, pending_state)
 
 
 def generate_assistant_reply(
@@ -301,15 +393,17 @@ def generate_assistant_reply(
     if not cleaned_user_id:
         raise ValueError("user_id is required for assistant reply generation.")
     if not cleaned_transcript:
-        raise ValueError("transcript is required for assistant reply generation.")
+        raise ValueError(
+            "transcript is required for assistant reply generation.")
 
     if isinstance(structured_data, dict):
         meta = structured_data.get("meta") or {}
         if meta.get("needs_clarification"):
-            return _build_clarification_reply(cleaned_transcript, structured_data)
+            return _build_clarification_reply_with_context(cleaned_user_id, cleaned_transcript, structured_data)
 
     if _has_finalized_transaction(structured_data):
-        llm_reply = _generate_openai_grounded_reply(cleaned_transcript, structured_data)
+        llm_reply = _generate_openai_grounded_reply(
+            cleaned_transcript, structured_data)
         if llm_reply:
             return llm_reply
         return _build_grounded_reply(cleaned_transcript, structured_data)
@@ -323,12 +417,15 @@ def generate_assistant_reply(
         "sttProvider": stt_provider,
     }
 
-    logger.info("Forwarding conversation reply generation to backend chat: %s", backend_url)
+    logger.info(
+        "Forwarding conversation reply generation to backend chat: %s", backend_url)
     response = requests.post(backend_url, json=payload, timeout=60)
 
     if response.status_code >= 400:
-        logger.error("Backend chat failed (%s): %s", response.status_code, response.text)
-        raise RuntimeError(f"Backend chat failed with status {response.status_code}")
+        logger.error("Backend chat failed (%s): %s",
+                     response.status_code, response.text)
+        raise RuntimeError(
+            f"Backend chat failed with status {response.status_code}")
 
     reply = (response.json() or {}).get("reply")
     if not isinstance(reply, str) or not reply.strip():

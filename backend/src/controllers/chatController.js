@@ -4,6 +4,7 @@ const { generateResponse } = require("../services/responseService");
 const { generateSpeech } = require("../services/ttsService");
 const { getRelevantContext } = require("../services/vectorService");
 const logger = require("../utils/logger");
+const { sendSuccess, sendError } = require("../utils/apiResponse");
 
 const FILLER_WORDS = new Set([
   "uh",
@@ -76,18 +77,18 @@ async function chat(req, res) {
   } = req.body || {};
 
   if (typeof userId !== "string" || !userId.trim()) {
-    return res.status(400).json({ error: "Something went wrong" });
+    return sendError(res, "userId is required", 400);
   }
 
   if (typeof message !== "string" || !message.trim()) {
-    return res.status(400).json({ error: "Something went wrong" });
+    return sendError(res, "message is required", 400);
   }
 
   try {
     const cleanedMessage = cleanInput(message, sttProvider);
 
     if (!cleanedMessage) {
-      return res.status(400).json({ error: "Something went wrong" });
+      return sendError(res, "message is required", 400);
     }
 
     const intentData = await resolveIntent(cleanedMessage);
@@ -118,10 +119,10 @@ async function chat(req, res) {
       timestamp: new Date().toISOString(),
     });
 
-    return res.status(200).json({
+    return sendSuccess(res, {
       reply,
       audioUrl,
-    });
+    }, "Chat response generated");
   } catch (error) {
     logger.error("Chat controller error", {
       userId,
@@ -133,8 +134,8 @@ async function chat(req, res) {
       details: error.details,
     });
 
-    return res.status(500).json({
-      error: "Something went wrong",
+    return sendError(res, "Something went wrong", 500, {
+      code: "CHAT_CONTROLLER_FAILED",
     });
   }
 }

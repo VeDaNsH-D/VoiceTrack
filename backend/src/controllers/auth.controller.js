@@ -1,16 +1,30 @@
 const authService = require("../services/auth.service");
-
-async function getAuthStatus(req, res, next) {
-  try {
-    const result = await authService.getAuthStatus();
-    res.status(200).json(result);
-  } catch (error) {
-    next(error);
-  }
-}
-
 const { signupUser, loginUser } = authService;
-const { generateToken } = require("../services/jwt.service");
+const { generateToken, verifyToken } = require("../services/jwt.service");
+const { sendSuccess, sendError } = require("../utils/apiResponse");
+
+async function getAuthStatus(req, res) {
+    try {
+        const authHeader = String(req.headers?.authorization || "");
+
+        if (!authHeader.startsWith("Bearer ")) {
+            return sendSuccess(res, { authenticated: false }, "No auth token provided");
+        }
+
+        const token = authHeader.slice(7).trim();
+        if (!token) {
+            return sendSuccess(res, { authenticated: false }, "No auth token provided");
+        }
+
+        const decoded = verifyToken(token);
+        return sendSuccess(res, {
+            authenticated: true,
+            user: decoded,
+        }, "Authenticated");
+    } catch (error) {
+        return sendSuccess(res, { authenticated: false }, "Invalid or expired token");
+    }
+}
 
 const buildBusinessSummary = (user) => {
     if (!user?.businessId) {
@@ -24,7 +38,6 @@ const buildBusinessSummary = (user) => {
         type: user.businessId.type
     };
 };
-
 const normalizePhone = (phone) => {
     return String(phone || "").replace(/\s+/g, "").trim();
 };
@@ -58,38 +71,23 @@ const signup = async (req, res) => {
         const businessType = normalizeName(req.body.businessType || "general").toLowerCase();
 
         if (!name) {
-            return res.status(400).json({
-                success: false,
-                message: "Name is required"
-            });
+            return sendError(res, "Name is required", 400);
         }
 
         if (!email && !phone) {
-            return res.status(400).json({
-                success: false,
-                message: "Email or phone number is required"
-            });
+            return sendError(res, "Email or phone number is required", 400);
         }
 
         if (email && !isValidEmail(email)) {
-            return res.status(400).json({
-                success: false,
-                message: "Please provide a valid email address"
-            });
+            return sendError(res, "Please provide a valid email address", 400);
         }
 
         if (phone && !isValidPhone(phone)) {
-            return res.status(400).json({
-                success: false,
-                message: "Please provide a valid phone number"
-            });
+            return sendError(res, "Please provide a valid phone number", 400);
         }
 
         if (password.length < 6) {
-            return res.status(400).json({
-                success: false,
-                message: "Password must be at least 6 characters long"
-            });
+            return sendError(res, "Password must be at least 6 characters long", 400);
         }
 
         if (!["create", "join"].includes(businessMode)) {
@@ -127,12 +125,11 @@ const signup = async (req, res) => {
         const token = generateToken(user);
         const business = buildBusinessSummary(user);
 
-        return res.status(201).json({
-            success: true,
+        return sendSuccess(res, {
             user,
             business,
             token
-        });
+        }, "Signup successful", 201);
     } catch (error) {
         const errorMessage = String(error.message || "");
         const statusCode = errorMessage.includes("already exists")
@@ -143,10 +140,7 @@ const signup = async (req, res) => {
                     ? 401
                     : 500;
 
-        return res.status(statusCode).json({
-            success: false,
-            message: errorMessage || "Signup failed"
-        });
+        return sendError(res, errorMessage || "Signup failed", statusCode);
     }
 };
 
@@ -160,10 +154,7 @@ const login = async (req, res) => {
         const password = String(req.body.password || "");
 
         if (!identifier || !password) {
-            return res.status(400).json({
-                success: false,
-                message: "Identifier and password are required"
-            });
+            return sendError(res, "Identifier and password are required", 400);
         }
 
         const user = await loginUser({
@@ -173,19 +164,14 @@ const login = async (req, res) => {
         const token = generateToken(user);
         const business = buildBusinessSummary(user);
 
-        return res.status(200).json({
-            success: true,
+        return sendSuccess(res, {
             user,
             business,
             token
-        });
+        }, "Login successful");
     } catch (error) {
         const statusCode = error.message === "Invalid credentials" ? 401 : 500;
-
-        return res.status(statusCode).json({
-            success: false,
-            message: error.message
-        });
+        return sendError(res, error.message, statusCode);
     }
 };
 
@@ -229,8 +215,8 @@ const getBusinessDetails = async (req, res) => {
 };
 
 module.exports = {
-  getAuthStatus,
-  signup,
-  login,
-  getBusinessDetails
+    getAuthStatus,
+    signup,
+    login,
+    getBusinessDetails,
 };

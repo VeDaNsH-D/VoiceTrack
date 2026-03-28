@@ -1,7 +1,16 @@
 import axios from 'axios'
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL?.trim() || 'http://localhost:5001').replace(/\/$/, '')
-const VOICE_API_BASE = (import.meta.env.VITE_VOICE_API_BASE_URL?.trim() || 'http://localhost:8000').replace(/\/$/, '')
+const API_BASE = (
+  import.meta.env.VITE_API_BASE_URL?.trim() ||
+  import.meta.env.VITE_BACKEND_URL?.trim() ||
+  'http://localhost:5001'
+).replace(/\/$/, '')
+
+const VOICE_API_BASE = (
+  import.meta.env.VITE_VOICE_API_BASE_URL?.trim() ||
+  import.meta.env.VITE_PYTHON_SERVICE_URL?.trim() ||
+  'http://localhost:8000'
+).replace(/\/$/, '')
 
 const apiClient = axios.create({
   baseURL: API_BASE,
@@ -142,7 +151,7 @@ export interface AssistantResult {
 
 export interface ChatResult {
   reply: string
-  audioNeeded: boolean
+  audioUrl: string | null
 }
 
 export interface ConversationStructuredData {
@@ -203,6 +212,26 @@ export interface ConversationResult {
   }
 }
 
+interface ApiEnvelope<T> {
+  success: boolean
+  data: T
+  message?: string
+  error?: unknown
+}
+
+function unwrapApiResponse<T>(payload: ApiEnvelope<T> | T): T {
+  if (
+    payload &&
+    typeof payload === 'object' &&
+    'success' in (payload as Record<string, unknown>) &&
+    'data' in (payload as Record<string, unknown>)
+  ) {
+    return (payload as ApiEnvelope<T>).data
+  }
+
+  return payload as T
+}
+
 export function setAuthToken(token: string | null): void {
   if (!token) {
     delete apiClient.defaults.headers.common.Authorization
@@ -223,21 +252,28 @@ export async function signupUser(payload: {
   businessCode?: string
   businessPassword: string
 }): Promise<AuthResult> {
-  const response = await apiClient.post<AuthResult>('/api/auth/signup', payload)
-  return response.data
+  const response = await apiClient.post<ApiEnvelope<AuthResult> | AuthResult>('/api/auth/signup', payload)
+  return unwrapApiResponse<AuthResult>(response.data)
 }
 
 export async function loginUser(payload: {
   identifier: string
   password: string
 }): Promise<AuthResult> {
-  const response = await apiClient.post<AuthResult>('/api/auth/login', payload)
-  return response.data
+  const response = await apiClient.post<ApiEnvelope<AuthResult> | AuthResult>('/api/auth/login', payload)
+  return unwrapApiResponse<AuthResult>(response.data)
 }
 
 export async function getAuthStatus(): Promise<{ authenticated: boolean; message: string }> {
-  const response = await apiClient.get<{ authenticated: boolean; message: string }>('/api/auth/status')
-  return response.data
+  const response = await apiClient.get<ApiEnvelope<{ authenticated: boolean; user?: unknown }> | { authenticated: boolean; message: string }>('/api/auth/status')
+  const data = unwrapApiResponse<{ authenticated: boolean; user?: unknown } | { authenticated: boolean; message: string }>(response.data)
+  if ('message' in data && typeof data.message === 'string') {
+    return { authenticated: Boolean(data.authenticated), message: data.message }
+  }
+  return {
+    authenticated: Boolean(data.authenticated),
+    message: data.authenticated ? 'Authenticated' : 'Not authenticated',
+  }
 }
 
 export async function getBusinessDetails(params: {
@@ -255,8 +291,8 @@ export async function processTransactionText(payload: {
   text: string
   userId?: string
 }): Promise<ProcessedTransaction> {
-  const response = await apiClient.post<ProcessedTransaction>('/api/transactions/process-text', payload)
-  return response.data
+  const response = await apiClient.post<ApiEnvelope<ProcessedTransaction> | ProcessedTransaction>('/api/transactions/process-text', payload)
+  return unwrapApiResponse<ProcessedTransaction>(response.data)
 }
 
 export async function saveStructuredTransaction(payload: {
@@ -272,8 +308,8 @@ export async function saveStructuredTransaction(payload: {
     clarification_question?: string | null
   }
 }): Promise<any> {
-  const response = await apiClient.post<any>('/api/transactions/save', payload)
-  return response.data
+  const response = await apiClient.post<ApiEnvelope<any> | any>('/api/transactions/save', payload)
+  return unwrapApiResponse<any>(response.data)
 }
 
 export async function getTransactionHistory(params: {
@@ -282,25 +318,25 @@ export async function getTransactionHistory(params: {
   endDate?: string
   limit?: number
 } = {}): Promise<HistoryResult> {
-  const response = await apiClient.get<HistoryResult>('/api/transactions/history', {
+  const response = await apiClient.get<ApiEnvelope<HistoryResult> | HistoryResult>('/api/transactions/history', {
     params,
   })
-  return response.data
+  return unwrapApiResponse<HistoryResult>(response.data)
 }
 
 export async function getInsights(userId?: string): Promise<InsightsResult> {
-  const response = await apiClient.get<InsightsResult>('/api/insights', {
+  const response = await apiClient.get<ApiEnvelope<InsightsResult> | InsightsResult>('/api/insights', {
     params: userId ? { userId } : undefined,
   })
-  return response.data
+  return unwrapApiResponse<InsightsResult>(response.data)
 }
 
 export async function askAssistant(payload: {
   userId: string
   message: string
 }): Promise<AssistantResult> {
-  const response = await apiClient.post<AssistantResult>('/api/assistant/query', payload)
-  return response.data
+  const response = await apiClient.post<ApiEnvelope<AssistantResult> | AssistantResult>('/api/assistant/query', payload)
+  return unwrapApiResponse<AssistantResult>(response.data)
 }
 
 export async function chatWithAssistant(payload: {
@@ -309,8 +345,8 @@ export async function chatWithAssistant(payload: {
   source?: string
   sttProvider?: string
 }): Promise<ChatResult> {
-  const response = await apiClient.post<ChatResult>('/chat', payload)
-  return response.data
+  const response = await apiClient.post<ApiEnvelope<ChatResult> | ChatResult>('/chat', payload)
+  return unwrapApiResponse<ChatResult>(response.data)
 }
 
 export async function sendConversationAudio(payload: {
@@ -323,23 +359,24 @@ export async function sendConversationAudio(payload: {
   formData.append('user_id', payload.userId)
   formData.append('start_new', String(Boolean(payload.startNew)))
 
-  const response = await voiceApiClient.post<ConversationResult>('/conversation', formData, {
+  const response = await voiceApiClient.post<ApiEnvelope<ConversationResult> | ConversationResult>('/conversation', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
   })
 
-  return response.data
+  return unwrapApiResponse<ConversationResult>(response.data)
 }
 
 export async function getProtectedProfile(): Promise<{ success: boolean; user: unknown }> {
-  const response = await apiClient.get<{ success: boolean; user: unknown }>('/api/protected')
-  return response.data
+  const response = await apiClient.get<ApiEnvelope<{ user: unknown }> | { success: boolean; user: unknown }>('/api/protected')
+  const data = unwrapApiResponse<{ user: unknown }>(response.data)
+  return { success: true, user: data.user }
 }
 
 export async function sendWebhook(payload: Record<string, unknown>): Promise<{ received: boolean; payload: unknown }> {
-  const response = await apiClient.post<{ received: boolean; payload: unknown }>('/api/webhooks', payload)
-  return response.data
+  const response = await apiClient.post<ApiEnvelope<{ received: boolean; payload: unknown }> | { received: boolean; payload: unknown }>('/api/webhooks', payload)
+  return unwrapApiResponse<{ received: boolean; payload: unknown }>(response.data)
 }
 
 export default apiClient

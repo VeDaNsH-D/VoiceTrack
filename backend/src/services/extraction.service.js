@@ -1,19 +1,30 @@
 const env = require("../config/env");
 const { preprocessText } = require("../utils/normalization");
 const { validateOutput } = require("./validation.service");
+const {
+  normalizeHindiNumbers,
+  normalizeDevanagariNumerals,
+  normalizeHindiItems,
+  normalizeHindiText,
+  detectHindiTransactionIntent,
+  isHindiContent,
+  isHinglish,
+  detectLanguageStyle,
+} = require("./hindi-normalization.service");
+const {
+  applyInferences,
+  canInferAndAccept,
+  buildConfirmationMessage,
+  buildConfirmationPrompt,
+  adjustConfidenceForInference,
+} = require("./inference.service");
 
+/**
+ * FIXED: Proper language detection that supports Hindi, Hinglish, and English
+ * Returns: "hindi" | "hinglish" | "english"
+ */
 function detectResponseLanguage(text) {
-  const input = String(text || "");
-
-  if (/[\u0900-\u097F]/.test(input)) {
-    return "marathi";
-  }
-
-  if (/\b(aaj|chai|samosa|doodh|liya|aur|ka|matlab|bhai|haan)\b/i.test(input)) {
-    return "hinglish";
-  }
-
-  return "english";
+  return detectLanguageStyle(text);
 }
 
 function getClarificationMessage(language) {
@@ -194,21 +205,46 @@ function detectAmbiguity(text, data) {
   };
 }
 
+/**
+ * FIXED: Improved confidence computation
+ * Logic:
+ * - If data is complete (no clarification needed) → 0.85+
+ * - If data partial but has required fields (qty + price + item) → 0.70+
+ * - If ambiguous but LLM attempted → 0.55+
+ * - If extraction failed → 0.2
+ */
 function computeConfidence(data, source) {
-  const hasStructuredData =
-    (data.sales?.length || 0) + (data.expenses?.length || 0) > 0;
-  const completeness = !data.meta?.needs_clarification ? 0.35 : 0.15;
-  const validationScore =
-    hasStructuredData ||
-    (data.meta?.needs_clarification && data.meta?.clarification_question)
-      ? 0.35
-      : 0;
-  const llmBase = source === "llm" ? 0.2 : 0;
+  const sales = data.sales || [];
+  const expenses = data.expenses || [];
+  const totalItems = sales.length + expenses.length;
+  const needsClarification = data.meta?.needs_clarification;
 
-  return Math.max(
-    0.05,
-    Math.min(0.9, Number((llmBase + completeness + validationScore).toFixed(2)))
-  );
+  // No structured data found
+  if (totalItems === 0) {
+    return 0.2;
+  }
+
+  // Check if all required fields are present
+  const hasSalesWithData = sales.every((s) => s.item && s.qty > 0 && s.price > 0);
+  const hasExpensesWithData = expenses.every((e) => e.item && e.amount > 0);
+  const dataIsComplete = hasSalesWithData && hasExpensesWithData;
+
+  if (dataIsComplete && !needsClarification) {
+    // Full confidence: all fields present and unambiguous
+    return source === "llm" ? 0.92 : 0.85;
+  }
+
+  if (dataIsComplete && needsClarification) {
+    // High confidence but needs user confirmation
+    return source === "llm" ? 0.80 : 0.75;
+  }
+
+  if (totalItems > 0) {
+    // Partial data present
+    return source === "llm" ? 0.70 : 0.65;
+  }
+
+  return 0.3;
 }
 
 const EXPENSE_KEYWORDS = new Set([
@@ -370,33 +406,104 @@ function ruleBasedExtractionSync(text) {
   };
 }
 
+/**
+ * FIXED: Multi-model LLM fallback with improved prompt
+ * - Tries Gemini first
+ * - Falls back to Groq if Gemini fails
+ * - Includes Hindi, Hinglish, and English examples
+ * - Forces strict JSON output
+ */
 async function callLlmFallback(text) {
   const responseLanguage = detectResponseLanguage(text);
 
-  if (!env.geminiApiKey) {
-    return {
-      ...createEmptyResponse(responseLanguage, "missing_api_key"),
-      debug: {
-        llm_attempted: false,
-        llm_succeeded: false,
-        llm_used_live_response: false,
-        llm_error: "missing_api_key",
-      },
-    };
+  // IMPROVED PROMPT with multilingual examples
+  const improvedPrompt = buildExtractorPrompt(text, responseLanguage);
+
+  // Try Gemini first
+  if (env.geminiApiKey) {
+    const geminiResult = await tryGeminiExtraction(improvedPrompt, responseLanguage);
+    if (geminiResult) return geminiResult;
   }
 
-  const prompt = [
-    "Extract structured transaction data from the user text.",
-    "Return ONLY valid JSON.",
-    "Do not add explanations.",
-    "Do not hallucinate missing values.",
-    "If unclear, set needs_clarification to true.",
-    "The clarification_question must be in the same language or language-mix as the user's input.",
-    "The clarification_question must be respectful, polite, and natural.",
-    `User language style: ${responseLanguage}`,
-    'Format: {"sales":[{"item":"string","qty":1,"price":1}],"expenses":[{"item":"string","amount":1}],"needs_clarification":false,"clarification_question":null}',
-    `Input: ${text}`,
-  ].join("\n");
+  // Fallback to Groq if Gemini fails or is unavailable
+  if (env.groqApiKey) {
+    const groqResult = await tryGroqExtraction(improvedPrompt, responseLanguage);
+    if (groqResult) return groqResult;
+  }
+
+  // Fallback to OpenAI if both Gemini and Groq fail
+  if (env.openaiApiKey) {
+    const openaiResult = await tryOpenAIExtraction(improvedPrompt, responseLanguage);
+    if (openaiResult) return openaiResult;
+  }
+
+  // All LLMs failed
+  return {
+    ...createEmptyResponse(responseLanguage, "all_llms_failed"),
+    debug: {
+      llm_attempted: true,
+      llm_succeeded: false,
+      llm_used_live_response: false,
+      llm_error: "all_llms_failed",
+    },
+  };
+}
+
+/**
+ * Build improved extraction prompt with multilingual examples
+ */
+function buildExtractorPrompt(text, language) {
+  const examples = {
+    hindi: {
+      example1: 'Input: "आज मैंने दस रुपये के चार चिप्स बेचे।"\nOutput: {"sales":[{"item":"chips","qty":4,"price":10}],"expenses":[],"needs_clarification":false}',
+      example2: 'Input: "मैंने 50 रुपये का दूध खरीदा."\nOutput: {"sales":[],"expenses":[{"item":"milk","amount":50}],"needs_clarification":false}',
+    },
+    hinglish: {
+      example1: 'Input: "maine 20 rupee ka chai becha"\nOutput: {"sales":[{"item":"chai","qty":1,"price":20}],"expenses":[],"needs_clarification":false}',
+      example2: 'Input: "3 samosa 15 ka likha"\nOutput: {"sales":[{"item":"samosa","qty":3,"price":15}],"expenses":[],"needs_clarification":false}',
+    },
+    english: {
+      example1: 'Input: "Sold 3 items for 100 each"\nOutput: {"sales":[{"item":"items","qty":3,"price":100}],"expenses":[],"needs_clarification":false}',
+      example2: 'Input: "Bought milk for 50"\nOutput: {"sales":[],"expenses":[{"item":"milk","amount":50}],"needs_clarification":false}',
+    },
+  };
+
+  const langExamples = examples[language] || examples.english;
+
+  return `You are a transaction extraction engine for Indian business owners. Extract structured transaction data.
+
+CRITICAL RULES:
+1. Return ONLY valid JSON (no explanations, no markdown)
+2. Convert all quantities and prices to numbers (not text)
+3. If transaction is unclear or incomplete, set needs_clarification=true with a polite question
+4. NEVER invent or hallucinate values - only extract what's explicitly stated
+5. Detect transaction type: sales (sold/becha/bikri) vs expenses (bought/kharida/liya)
+6. When detecting Hindi/Hinglish: "दस" = 10, "चार" = 4, "बेचे" = sold, "खरीदा" = bought
+7. The clarification_question must be in the SAME language as the input
+8. Always validate: item names should be meaningful, qty/price must be > 0
+
+EXAMPLES (${language.toUpperCase()}):
+${langExamples.example1}
+${langExamples.example2}
+
+JSON FORMAT (strict):
+{
+  "sales": [{"item": string, "qty": number, "price": number}],
+  "expenses": [{"item": string, "amount": number}],
+  "needs_clarification": boolean,
+  "clarification_question": string | null
+}
+
+NOW PROCESS THIS INPUT:
+Input: ${text}
+Output:`;
+}
+
+/**
+ * Try extracting with Gemini API
+ */
+async function tryGeminiExtraction(prompt, responseLanguage) {
+  if (!env.geminiApiKey) return null;
 
   try {
     const response = await fetch(`${env.geminiBaseUrl}/chat/completions`, {
@@ -406,14 +513,14 @@ async function callLlmFallback(text) {
         Authorization: `Bearer ${env.geminiApiKey}`,
       },
       body: JSON.stringify({
-        model: env.geminiModel,
+        model: env.geminiModel || "gemini-1.5-flash",
         temperature: 0,
         response_format: { type: "json_object" },
         messages: [
           {
             role: "system",
             content:
-              "You convert raw transaction text into strict JSON with sales and expenses.",
+              "You are a transaction JSON extractor. Return ONLY valid JSON with no explanations.",
           },
           {
             role: "user",
@@ -421,21 +528,30 @@ async function callLlmFallback(text) {
           },
         ],
       }),
+      timeout: 15000,
     });
 
     if (!response.ok) {
-      throw new Error(`LLM request failed with status ${response.status}`);
+      console.warn(`Gemini extraction failed: ${response.status}`);
+      return null;
     }
 
     const completion = await response.json();
     const content = completion.choices?.[0]?.message?.content;
-    const parsed = JSON.parse(content || "{}");
+
+    if (!content) {
+      console.warn("Gemini returned empty content");
+      return null;
+    }
+
+    const parsed = parseJSONSafely(content);
+    if (!parsed) return null;
 
     return {
       sales: parsed.sales || [],
       expenses: parsed.expenses || [],
       meta: {
-        source: "llm",
+        source: "llm_gemini",
         needs_clarification: Boolean(parsed.needs_clarification),
         clarification_question: makeRespectfulClarification(
           parsed.clarification_question,
@@ -446,22 +562,186 @@ async function callLlmFallback(text) {
         llm_attempted: true,
         llm_succeeded: true,
         llm_used_live_response: true,
+        llm_model: "gemini",
         llm_error: null,
       },
     };
   } catch (error) {
+    console.warn(`Gemini extraction error: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * Try extracting with Groq API (LLaMA fallback)
+ */
+async function tryGroqExtraction(prompt, responseLanguage) {
+  if (!env.groqApiKey) return null;
+
+  try {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.groqApiKey}`,
+      },
+      body: JSON.stringify({
+        model: "mixtral-8x7b-32768", // Groq's fastest model
+        temperature: 0,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a transaction JSON extractor. Return ONLY valid JSON with no explanations.",
+          },
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+      }),
+      timeout: 15000,
+    });
+
+    if (!response.ok) {
+      console.warn(`Groq extraction failed: ${response.status}`);
+      return null;
+    }
+
+    const completion = await response.json();
+    const content = completion.choices?.[0]?.message?.content;
+
+    if (!content) {
+      console.warn("Groq returned empty content");
+      return null;
+    }
+
+    const parsed = parseJSONSafely(content);
+    if (!parsed) return null;
+
     return {
-      ...createEmptyResponse(error.message || "unknown_llm_error"),
+      sales: parsed.sales || [],
+      expenses: parsed.expenses || [],
       meta: {
-        ...createEmptyResponse(responseLanguage, error.message || "unknown_llm_error").meta,
+        source: "llm_groq",
+        needs_clarification: Boolean(parsed.needs_clarification),
+        clarification_question: makeRespectfulClarification(
+          parsed.clarification_question,
+          responseLanguage
+        ),
       },
       debug: {
         llm_attempted: true,
-        llm_succeeded: false,
-        llm_used_live_response: false,
-        llm_error: error.message || "unknown_llm_error",
+        llm_succeeded: true,
+        llm_used_live_response: true,
+        llm_model: "groq",
+        llm_error: null,
       },
     };
+  } catch (error) {
+    console.warn(`Groq extraction error: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * Try extracting with OpenAI GPT API (final fallback)
+ */
+async function tryOpenAIExtraction(prompt, responseLanguage) {
+  if (!env.openaiApiKey) return null;
+
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.openaiApiKey}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-3.5-turbo",
+        temperature: 0,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a transaction JSON extractor. Return ONLY valid JSON with no explanations.",
+          },
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+      }),
+      timeout: 15000,
+    });
+
+    if (!response.ok) {
+      console.warn(`OpenAI extraction failed: ${response.status}`);
+      return null;
+    }
+
+    const completion = await response.json();
+    const content = completion.choices?.[0]?.message?.content;
+
+    if (!content) {
+      console.warn("OpenAI returned empty content");
+      return null;
+    }
+
+    const parsed = parseJSONSafely(content);
+    if (!parsed) return null;
+
+    return {
+      sales: parsed.sales || [],
+      expenses: parsed.expenses || [],
+      meta: {
+        source: "llm_openai",
+        needs_clarification: Boolean(parsed.needs_clarification),
+        clarification_question: makeRespectfulClarification(
+          parsed.clarification_question,
+          responseLanguage
+        ),
+      },
+      debug: {
+        llm_attempted: true,
+        llm_succeeded: true,
+        llm_used_live_response: true,
+        llm_model: "openai",
+        llm_error: null,
+      },
+    };
+  } catch (error) {
+    console.warn(`OpenAI extraction error: ${error.message}`);
+    return null;
+  }
+}
+
+/**
+ * Safe JSON parsing with fallback
+ */
+function parseJSONSafely(content) {
+  try {
+    const text = String(content || "").trim();
+
+    // Try to extract JSON from markdown code blocks
+    let jsonStr = text;
+    if (text.includes("```json")) {
+      const match = text.match(/```json\s*([\s\S]*?)\s*```/);
+      if (match) jsonStr = match[1];
+    } else if (text.includes("```")) {
+      const match = text.match(/```\s*([\s\S]*?)\s*```/);
+      if (match) jsonStr = match[1];
+    }
+
+    // Find JSON object
+    const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+
+    return JSON.parse(jsonMatch[0]);
+  } catch (e) {
+    console.warn(`JSON parsing failed: ${e.message}`);
+    return null;
   }
 }
 
@@ -469,37 +749,90 @@ async function callLLM(text) {
   return callLlmFallback(text);
 }
 
+/**
+ * FIXED: Core transaction processing with Hindi support
+ * Pipeline:
+ * 1. Detect language & normalize Hindi text
+ * 2. Attempt LLM extraction (with multi-model fallback)
+ * 3. Attempt rule-based extraction
+ * 4. Merge and validate results
+ * 5. Compute improved confidence
+ */
 async function processTransactionText(text) {
   const responseLanguage = detectResponseLanguage(text);
-  const normalizedText = preprocessText(text);
+
+  // CRITICAL: Normalize Hindi input BEFORE processing
+  let normalizedText =
+    isHindiContent(text) || isHinglish(text)
+      ? normalizeHindiText(text)
+      : preprocessText(text);
+
+  console.log(`[EXTRACTION] Original text: ${text}`);
+  console.log(`[EXTRACTION] Language detected: ${responseLanguage}`);
+  console.log(`[EXTRACTION] Normalized text: ${normalizedText}`);
+
   const llmCandidate = await callLlmFallback(normalizedText);
+  console.log(`[EXTRACTION] LLM candidate:`, llmCandidate);
+
   const ruleCandidate = ruleBasedExtractionSync(normalizedText);
+  console.log(`[EXTRACTION] Rule candidate:`, ruleCandidate);
+
   const llmHasData = (llmCandidate.sales?.length || 0) + (llmCandidate.expenses?.length || 0) > 0;
   const ruleHasData = (ruleCandidate.sales?.length || 0) + (ruleCandidate.expenses?.length || 0) > 0;
-  const shouldUseRules =
-    !llmCandidate.debug?.llm_succeeded ||
-    !llmHasData ||
-    (llmCandidate.meta?.needs_clarification && ruleHasData);
+
+  // IMPROVED: Better source selection logic
+  const shouldUseRules = !llmCandidate.debug?.llm_succeeded || !llmHasData;
   const selectedCandidate = shouldUseRules ? ruleCandidate : llmCandidate;
+
   const mergedCandidate = mergeDuplicates(
     reconcileExplicitPrices(normalizedText, selectedCandidate)
   );
-  const ambiguity = detectAmbiguity(normalizedText, mergedCandidate);
-  const selectedSource = shouldUseRules ? "rules" : "llm";
+
+  // ============================================
+  // SMART INFERENCE LAYER
+  // ============================================
+  const inferenceResult = applyInferences(mergedCandidate, normalizedText);
+  const enrichedData = {
+    sales: inferenceResult.sales,
+    expenses: inferenceResult.expenses,
+  };
+
+  const acceptabilityCheck = canInferAndAccept(enrichedData, normalizedText);
+
+  console.log(`[INFERENCE] Can accept: ${acceptabilityCheck.can_accept}`);
+  console.log(`[INFERENCE] Reason: ${acceptabilityCheck.reason}`);
+  console.log(`[INFERENCE] Needs clarification: ${acceptabilityCheck.needs_clarification}`);
+  console.log(`[INFERENCE] Inferred data:`, inferenceResult.inference_metadata);
+
+  // ============================================
+
+  const ambiguity = detectAmbiguity(normalizedText, enrichedData);
+  const selectedSource = shouldUseRules ? "rules" : llmCandidate.debug?.llm_model || "llm";
+
   const validated = validateOutput({
-    sales: mergedCandidate.sales,
-    expenses: mergedCandidate.expenses,
+    sales: enrichedData.sales,
+    expenses: enrichedData.expenses,
     meta: {
       source: selectedSource,
       needs_clarification:
-        mergedCandidate.meta?.needs_clarification || ambiguity.ambiguous,
+        acceptabilityCheck.needs_clarification || ambiguity.ambiguous,
       clarification_question:
-        mergedCandidate.meta?.clarification_question ||
-        ambiguity.clarification_question,
+        ambiguity.clarification_question &&
+          acceptabilityCheck.needs_clarification
+          ? buildConfirmationPrompt(enrichedData, responseLanguage)
+          : ambiguity.clarification_question,
+      inference_metadata: inferenceResult.inference_metadata,
+      bulk_pattern: inferenceResult.bulk_pattern,
     },
   });
 
   if (validated.valid) {
+    let baseConfidence = computeConfidence(validated.data, selectedSource);
+    const adjustedConfidence = adjustConfidenceForInference(
+      baseConfidence,
+      inferenceResult.inference_metadata
+    );
+
     return {
       normalizedText,
       result: {
@@ -507,15 +840,23 @@ async function processTransactionText(text) {
         meta: {
           ...validated.data.meta,
           source: selectedSource,
-          confidence: computeConfidence(validated.data, selectedSource),
+          confidence: adjustedConfidence,
+          language: responseLanguage,
+          inference_applied: inferenceResult.inference_metadata.inferred,
+          confirmation_needed: acceptabilityCheck.needs_clarification,
         },
         debug: {
           llm_attempted: Boolean(llmCandidate.debug?.llm_attempted),
           llm_succeeded: Boolean(llmCandidate.debug?.llm_succeeded),
+          llm_model: llmCandidate.debug?.llm_model || "none",
           llm_used_live_response: Boolean(
             llmCandidate.debug?.llm_used_live_response
           ),
           llm_error: llmCandidate.debug?.llm_error || null,
+          rule_has_data: ruleHasData,
+          hindi_text_normalized: isHindiContent(text) || isHinglish(text),
+          inferred_data: inferenceResult.inference_metadata.inferred,
+          inference_reason: inferenceResult.inference_metadata.inferences_applied,
         },
       },
     };
@@ -528,12 +869,25 @@ async function processTransactionText(text) {
         responseLanguage,
         llmCandidate.debug?.llm_error || "llm_output_failed_validation"
       ),
+      meta: {
+        ...createEmptyResponse(
+          responseLanguage,
+          llmCandidate.debug?.llm_error || "llm_output_failed_validation"
+        ).meta,
+        language: responseLanguage,
+        inference_applied: false,
+        confirmation_needed: false,
+      },
       debug: {
         llm_attempted: Boolean(llmCandidate.debug?.llm_attempted),
         llm_succeeded: false,
+        llm_model: llmCandidate.debug?.llm_model || "none",
         llm_used_live_response: false,
         llm_error:
           llmCandidate.debug?.llm_error || "llm_output_failed_validation",
+        validation_error: "output_failed_validation",
+        inferred_data: false,
+        inference_reason: [],
       },
     },
   };

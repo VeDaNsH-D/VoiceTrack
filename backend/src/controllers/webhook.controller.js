@@ -1,9 +1,11 @@
+const { sendSuccess } = require("../utils/apiResponse");
+
 async function receiveWebhook(req, res, next) {
   try {
-    res.status(202).json({
+    return sendSuccess(res, {
       received: true,
       payload: req.body || null,
-    });
+    }, "Webhook received", 202);
   } catch (error) {
     next(error);
   }

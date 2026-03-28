@@ -3,7 +3,7 @@ const env = require("../config/env");
 const logger = require("../utils/logger");
 
 function buildTtsUrl() {
-  return `${env.ttsBaseUrl.replace(/\/$/, "")}${env.ttsPath.startsWith("/") ? env.ttsPath : `/${env.ttsPath}`}`;
+  return `${env.pythonServiceUrl.replace(/\/$/, "")}${env.ttsPath.startsWith("/") ? env.ttsPath : `/${env.ttsPath}`}`;
 }
 
 function toAbsoluteAudioUrl(audioUrl) {
@@ -15,7 +15,7 @@ function toAbsoluteAudioUrl(audioUrl) {
     return audioUrl;
   }
 
-  const normalizedBaseUrl = env.ttsBaseUrl.replace(/\/$/, "");
+  const normalizedBaseUrl = env.pythonServiceUrl.replace(/\/$/, "");
   const normalizedPath = audioUrl.startsWith("/") ? audioUrl : `/${audioUrl}`;
 
   return `${normalizedBaseUrl}${normalizedPath}`;
@@ -42,7 +42,8 @@ async function generateSpeech(text, language = null) {
       timeout: env.ttsTimeoutMs,
     });
 
-    const audioUrl = response?.data?.audioUrl || response?.data?.audio_path || null;
+    const responsePayload = response?.data?.success ? response.data.data : response?.data;
+    const audioUrl = responsePayload?.audioUrl || responsePayload?.audio_path || null;
     const normalizedAudioUrl = toAbsoluteAudioUrl(audioUrl);
 
     if (!normalizedAudioUrl) {

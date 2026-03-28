@@ -1,26 +1,16 @@
 import React, { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { AnalyticsModal } from './AnalyticsModal.tsx'
-import {
-  getBusinessDetails,
-  getInsights,
-  getTransactionHistory,
-  type BusinessDetailsResult,
-  type HistoryEntry,
-  type InsightsResult,
-} from '../services/api'
+import { getInsights, getTransactionHistory, type HistoryEntry, type InsightsResult } from '../services/api'
 
 interface DashboardMainProps {
   userId: string
-  businessCode?: string
-  businessId?: string
   userName: string
-  userOccupation: string
   onToggleSidebar: () => void
   language: 'EN' | 'HI'
 }
 
-export const DashboardMain: React.FC<DashboardMainProps> = ({ userId, businessCode, businessId, userName, userOccupation, onToggleSidebar, language }) => {
+export const DashboardMain: React.FC<DashboardMainProps> = ({ userId, userName, onToggleSidebar, language }) => {
   const [displayBalance, setDisplayBalance] = useState(0)
   const [showAnalytics, setShowAnalytics] = useState(false)
   const [insights, setInsights] = useState<InsightsResult>({
@@ -28,73 +18,38 @@ export const DashboardMain: React.FC<DashboardMainProps> = ({ userId, businessCo
     transactionCount: 0,
   })
   const [history, setHistory] = useState<HistoryEntry[]>([])
-  const [businessDetails, setBusinessDetails] = useState<BusinessDetailsResult | null>(null)
-  const [copyFeedback, setCopyFeedback] = useState('')
   const finalBalance = Math.max(0, insights.totals.sales - insights.totals.expenses)
 
-  useEffect(() => {
-    let mounted = true
-
-    const loadInsights = async () => {
-      try {
-        const response = await getInsights(userId || undefined)
-        const historyResponse = await getTransactionHistory({
-          userId: userId || undefined,
-          limit: 100,
-        })
-        if (mounted) {
-          setInsights(response)
-          setHistory(historyResponse.transactions)
-        }
-      } catch {
-        if (mounted) {
-          setInsights({
-            totals: { sales: 0, expenses: 0 },
-            transactionCount: 0,
-          })
-          setHistory([])
-        }
-      }
-    }
-
-    loadInsights()
-
-    return () => {
-      mounted = false
+  const loadInsights = React.useCallback(async () => {
+    try {
+      const response = await getInsights(userId || undefined)
+      const historyResponse = await getTransactionHistory({
+        userId: userId || undefined,
+        limit: 100,
+      })
+      setInsights(response)
+      setHistory(historyResponse.transactions)
+    } catch {
+      setInsights({
+        totals: { sales: 0, expenses: 0 },
+        transactionCount: 0,
+      })
+      setHistory([])
     }
   }, [userId])
 
   useEffect(() => {
-    let mounted = true
+    void loadInsights()
 
-    const loadBusinessDetails = async () => {
-      if (!userId && !businessCode && !businessId) {
-        setBusinessDetails(null)
-        return
-      }
-
-      try {
-        const response = await getBusinessDetails({
-          ...(userId ? { userId } : {}),
-          ...(businessCode ? { businessCode } : {}),
-          ...(businessId ? { businessId } : {}),
-        })
-        if (mounted) {
-          setBusinessDetails(response)
-        }
-      } catch {
-        if (mounted) {
-          setBusinessDetails(null)
-        }
-      }
+    const onTransactionSaved = () => {
+      void loadInsights()
     }
-
-    loadBusinessDetails()
+    window.addEventListener('voicetrack:transaction-saved', onTransactionSaved)
 
     return () => {
-      mounted = false
+      window.removeEventListener('voicetrack:transaction-saved', onTransactionSaved)
     }
-  }, [userId, businessCode, businessId])
+  }, [loadInsights])
 
   // Animate balance
   useEffect(() => {
@@ -126,21 +81,6 @@ export const DashboardMain: React.FC<DashboardMainProps> = ({ userId, businessCo
     visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } },
   }
 
-  const handleCopy = async (value: string, label: string) => {
-    if (!value || value === 'N/A') {
-      return
-    }
-
-    try {
-      await navigator.clipboard.writeText(value)
-      setCopyFeedback(language === 'EN' ? `${label} copied` : `${label} कॉपी हुआ`)
-      window.setTimeout(() => setCopyFeedback(''), 1800)
-    } catch {
-      setCopyFeedback(language === 'EN' ? 'Copy failed' : 'कॉपी असफल')
-      window.setTimeout(() => setCopyFeedback(''), 1800)
-    }
-  }
-
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -156,7 +96,7 @@ export const DashboardMain: React.FC<DashboardMainProps> = ({ userId, businessCo
       >
         {/* Top Handle to Close Dashboard overlay */}
         <motion.div variants={itemVariants} className="mb-6 flex justify-start mt-4">
-          <button 
+          <button
             onClick={onToggleSidebar}
             className="w-10 h-10 bg-white bg-opacity-60 rounded-full flex items-center justify-center hover:bg-opacity-100 transition-colors shadow-sm"
           >
@@ -176,16 +116,6 @@ export const DashboardMain: React.FC<DashboardMainProps> = ({ userId, businessCo
           <p className="text-[#1A1A1A]/60 font-medium">
             {language === 'EN' ? 'AI manages your ledger so you can focus on sales.' : 'AI आपका लेजर प्रबंधित करता है ताकि आप बिक्री पर ध्यान दे सकें।'}
           </p>
-          {userOccupation && (
-            <p className="text-[#1A1A1A]/50 text-sm mt-1">
-              {language === 'EN' ? `Business type: ${userOccupation}` : `व्यवसाय प्रकार: ${userOccupation}`}
-            </p>
-          )}
-          {businessCode && (
-            <p className="text-[#1A1A1A]/60 text-xs mt-1 font-semibold tracking-wide">
-              {language === 'EN' ? `Business ID: ${businessCode}` : `बिजनेस आईडी: ${businessCode}`}
-            </p>
-          )}
         </motion.div>
 
         {/* Balance Card Container */}
@@ -196,7 +126,7 @@ export const DashboardMain: React.FC<DashboardMainProps> = ({ userId, businessCo
           <div className="w-full glass-card rounded-3xl p-6 relative overflow-hidden group shadow-lg">
             {/* Background pattern */}
             <div className="absolute inset-0 opacity-5 bg-[radial-gradient(#1A1A1A_1px,transparent_1px)] [background-size:16px_16px]"></div>
-            
+
             <div className="relative z-10 flex flex-col items-center">
               <span className="text-[13px] font-bold uppercase tracking-wider text-[#1A1A1A]/50 mb-2">
                 {language === 'EN' ? 'this month' : 'इस महीने'}
@@ -228,8 +158,8 @@ export const DashboardMain: React.FC<DashboardMainProps> = ({ userId, businessCo
                 : `आपके नवीनतम रिकॉर्ड से शुद्ध बैलेंस ₹${Math.round(finalBalance).toLocaleString('en-IN')} है।`}
             </h3>
           </div>
-          
-          <button 
+
+          <button
             onClick={() => setShowAnalytics(true)}
             className="w-[52px] h-[52px] bg-[#161211] rounded-[20px] flex items-center justify-center flex-shrink-0 hover:scale-105 transition-all shadow-md"
           >
@@ -237,59 +167,6 @@ export const DashboardMain: React.FC<DashboardMainProps> = ({ userId, businessCo
               <path d="M7 17L17 7M17 7H7M17 7V17" />
             </svg>
           </button>
-        </motion.div>
-
-        <motion.div variants={itemVariants} className="glass-card p-5 mt-4">
-          <p className="text-[13px] font-medium text-[#1A1A1A] opacity-80 mb-2">
-            {language === 'EN' ? 'Business visibility & collaboration' : 'बिजनेस जानकारी और सहयोग'}
-          </p>
-          <div className="space-y-1 text-sm text-[#1A1A1A]/80">
-            <div className="flex items-center justify-between gap-2">
-              <p>
-                {language === 'EN' ? 'Business Code:' : 'बिजनेस कोड:'}{' '}
-                <span className="font-semibold text-[#1A1A1A]">{businessDetails?.business.businessCode || businessCode || 'N/A'}</span>
-              </p>
-              <button
-                type="button"
-                onClick={() => handleCopy(businessDetails?.business.businessCode || businessCode || 'N/A', language === 'EN' ? 'Business code' : 'बिजनेस कोड')}
-                className="text-xs font-semibold px-3 py-1 rounded-full border border-[#1A1A1A]/20 hover:bg-white/50 transition-colors"
-              >
-                {language === 'EN' ? 'Copy' : 'कॉपी'}
-              </button>
-            </div>
-            <div className="flex items-start justify-between gap-2">
-              <p>
-                {language === 'EN' ? 'Business DB ID:' : 'बिजनेस डीबी आईडी:'}{' '}
-                <span className="font-semibold text-[#1A1A1A] break-all">{businessDetails?.business._id || businessId || 'N/A'}</span>
-              </p>
-              <button
-                type="button"
-                onClick={() => handleCopy(businessDetails?.business._id || businessId || 'N/A', language === 'EN' ? 'Business ID' : 'बिजनेस आईडी')}
-                className="text-xs font-semibold px-3 py-1 rounded-full border border-[#1A1A1A]/20 hover:bg-white/50 transition-colors"
-              >
-                {language === 'EN' ? 'Copy' : 'कॉपी'}
-              </button>
-            </div>
-            <p>
-              {language === 'EN' ? 'Stored in DB:' : 'डीबी में सेव:'}{' '}
-              <span className="font-semibold text-[#1A1A1A]">{businessDetails?.storedInDb ? (language === 'EN' ? 'Yes' : 'हां') : (language === 'EN' ? 'Unknown' : 'अज्ञात')}</span>
-            </p>
-            <p>
-              {language === 'EN' ? 'Members:' : 'सदस्य:'}{' '}
-              <span className="font-semibold text-[#1A1A1A]">{businessDetails?.business.membersCount ?? 0}</span>
-            </p>
-            <p>
-              {language === 'EN' ? 'Collaboration:' : 'सहयोग:'}{' '}
-              <span className="font-semibold text-[#1A1A1A]">
-                {businessDetails?.business.collaborationEnabled
-                  ? (language === 'EN' ? 'Active (shared business)' : 'सक्रिय (साझा बिजनेस)')
-                  : (language === 'EN' ? 'Single member' : 'एक सदस्य')}
-              </span>
-            </p>
-            {copyFeedback && (
-              <p className="text-xs font-semibold text-[#8A9B80] pt-1">{copyFeedback}</p>
-            )}
-          </div>
         </motion.div>
       </motion.div>
 

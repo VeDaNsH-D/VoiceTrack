@@ -16,7 +16,6 @@ export type ViewState = 'landing' | 'auth' | 'voice' | 'dashboard' | 'history' |
 export interface AuthSession {
   userId: string
   name: string
-  occupation: string
   token: string
   identifier: string
   businessCode?: string
@@ -49,13 +48,11 @@ export function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false)
   const [language, setLanguage] = useState<'EN' | 'HI'>('EN')
   const [userName, setUserName] = useState<string>(() => getSavedSession()?.name || '')
-  const [userOccupation, setUserOccupation] = useState<string>(() => getSavedSession()?.occupation || '')
 
   const handleNavigate = (view: ViewState) => {
     if (view === 'landing') {
       setSession(null)
       setUserName('')
-      setUserOccupation('')
       setAuthToken(null)
       localStorage.removeItem('voicetrack.session')
     }
@@ -75,7 +72,6 @@ export function App() {
   const handleLogin = (authSession: AuthSession) => {
     setSession(authSession)
     setUserName(authSession.name)
-    setUserOccupation(authSession.occupation)
     setAuthToken(authSession.token)
     localStorage.setItem('voicetrack.session', JSON.stringify(authSession))
     setCurrentView('voice')
@@ -84,11 +80,9 @@ export function App() {
   const handleDemo = () => {
     setAuthToken(null)
     setUserName('Guest')
-    setUserOccupation('Tester')
     setSession({
       userId: 'demo-user',
       name: 'Guest',
-      occupation: 'Tester',
       token: '',
       identifier: 'demo-user',
       businessCode: 'DEMO',
@@ -99,13 +93,13 @@ export function App() {
 
   return (
     <div className="h-screen bg-app-gradient flex flex-col overflow-hidden">
-      
+
       {/* Global Sidebar Component */}
-      <Sidebar 
-        isOpen={isSidebarOpen} 
-        onClose={() => setIsSidebarOpen(false)} 
-        onNavigate={handleNavigate} 
-        currentView={currentView} 
+      <Sidebar
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
+        onNavigate={handleNavigate}
+        currentView={currentView}
         language={language}
         toggleLanguage={toggleLanguage}
       />
@@ -117,8 +111,8 @@ export function App() {
             exit={{ opacity: 0, scale: 0.95 }}
             className="flex-1 overflow-y-auto"
           >
-            <Landing 
-              onGetStarted={() => setCurrentView('auth')} 
+            <Landing
+              onGetStarted={() => setCurrentView('auth')}
               onDemo={handleDemo}
               language={language}
             />
@@ -145,7 +139,7 @@ export function App() {
             exit={{ opacity: 0 }}
             className="flex-1 overflow-y-auto"
           >
-            <DashboardMain userId={session?.userId || ''} businessCode={session?.businessCode} businessId={session?.businessId} userName={userName} userOccupation={userOccupation} onToggleSidebar={toggleSidebar} language={language} />
+            <DashboardMain userId={session?.userId || ''} userName={userName} onToggleSidebar={toggleSidebar} language={language} />
           </motion.div>
         )}
 

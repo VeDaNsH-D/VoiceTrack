@@ -1,10 +1,4 @@
 const mongoose = require("mongoose");
-async function getAuthStatus() {
-  return {
-    authenticated: false,
-    message: "Auth service placeholder",
-  };
-}
 const crypto = require("crypto");
 
 const User = require("../models/user.model");
@@ -272,7 +266,6 @@ const getBusinessSnapshot = async ({ userId, businessCode, businessId }) => {
 };
 
 module.exports = {
-    getAuthStatus,
     signupUser,
     loginUser,
     getBusinessSnapshot

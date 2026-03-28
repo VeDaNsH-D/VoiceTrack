@@ -7,10 +7,12 @@ function errorMiddleware(error, req, res, next) {
   const message = error.message || "Internal server error";
   const code = error.code || "INTERNAL_SERVER_ERROR";
 
-  res.status(statusCode).json({
+  return res.status(statusCode).json({
+    success: false,
+    message,
     error: {
-      message,
       code,
+      ...(error.details ? { details: error.details } : {}),
     },
   });
 }

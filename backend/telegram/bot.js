@@ -1,13 +1,16 @@
 const path = require("path");
 const dotenv = require("dotenv");
 const axios = require("axios");
+const FormData = require("form-data");
 const TelegramBot = require("node-telegram-bot-api");
 
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
-const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_TOKEN;
 const BACKEND_URL = (process.env.BACKEND_URL || "http://localhost:5001").replace(/\/$/, "");
-const STT_URL = (process.env.STT_URL || "http://localhost:8000/stt").replace(/\/$/, "");
+const PYTHON_SERVICE_URL = (process.env.PYTHON_SERVICE_URL || process.env.STT_BASE_URL || "http://127.0.0.1:8001").replace(/\/$/, "");
+const STT_PATH = process.env.STT_PATH || "/stt";
+const STT_URL = `${PYTHON_SERVICE_URL}${STT_PATH.startsWith("/") ? STT_PATH : `/${STT_PATH}`}`;
 
 const FAILURE_MESSAGE = "Something went wrong";
 const SPEAK_PROMPT = "Voice note bhejo 🎙️";
@@ -94,16 +97,17 @@ async function callChatBackend(chatId, message) {
   };
 
   const { data } = await http.post(`${BACKEND_URL}/chat`, payload);
+  const responsePayload = data?.success ? data.data : data;
 
   console.log("backend response:", {
     chatId,
     request: payload,
-    response: data,
+    response: responsePayload,
   });
 
   return {
-    reply: normalizeText(data?.reply),
-    audioUrl: normalizeText(data?.audioUrl) || null,
+    reply: normalizeText(responsePayload?.reply),
+    audioUrl: normalizeText(responsePayload?.audioUrl) || null,
   };
 }
 
@@ -119,9 +123,27 @@ async function handleMappedQuery(bot, chatId, query) {
   await sendReplyWithNextActions(bot, chatId, reply, audioUrl);
 }
 
-async function transcribeVoice(fileUrl) {
-  const { data } = await http.post(STT_URL, { audioUrl: fileUrl });
-  const text = normalizeText(data?.text);
+async function transcribeVoiceFromTelegramFile(fileUrl, fileName = "voice.ogg") {
+  const audioResponse = await axios.get(fileUrl, {
+    responseType: "arraybuffer",
+    timeout: 30000,
+  });
+
+  const formData = new FormData();
+  formData.append("file", Buffer.from(audioResponse.data), {
+    filename: fileName,
+    contentType: "audio/ogg",
+  });
+
+  const { data } = await axios.post(STT_URL, formData, {
+    headers: formData.getHeaders(),
+    timeout: 60000,
+  });
+
+  const responsePayload = data?.success ? data.data : data;
+  const text = normalizeText(
+    responsePayload?.text || responsePayload?.final_text || responsePayload?.message
+  );
 
   if (!text) {
     throw new Error("Empty transcription from STT");
@@ -258,7 +280,10 @@ async function handleVoice(bot, msg) {
     }
 
     const fileUrl = getTelegramFileUrl(filePath);
-    const transcribedText = await transcribeVoice(fileUrl);
+    const transcribedText = await transcribeVoiceFromTelegramFile(
+      fileUrl,
+      path.basename(filePath) || "voice.ogg"
+    );
 
     console.log("mapped query:", {
       chatId,

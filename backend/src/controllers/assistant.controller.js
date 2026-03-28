@@ -2,6 +2,7 @@ const { extractIntent } = require("../services/intentService");
 const { handleQuery } = require("../services/queryService");
 const { generateResponse } = require("../services/responseService");
 const { getRelevantContext } = require("../services/vectorService");
+const { sendSuccess, sendError } = require("../utils/apiResponse");
 
 function isHindiLike(text) {
   const input = String(text || "");
@@ -78,21 +79,11 @@ async function queryAssistant(req, res) {
   const { userId, message } = req.body || {};
 
   if (typeof userId !== "string" || !userId.trim()) {
-    return res.status(400).json({
-      error: {
-        message: "userId is required",
-        code: "INVALID_USER_ID",
-      },
-    });
+    return sendError(res, "userId is required", 400, { code: "INVALID_USER_ID" });
   }
 
   if (typeof message !== "string" || !message.trim()) {
-    return res.status(400).json({
-      error: {
-        message: "message is required",
-        code: "INVALID_MESSAGE",
-      },
-    });
+    return sendError(res, "message is required", 400, { code: "INVALID_MESSAGE" });
   }
 
   try {
@@ -107,7 +98,7 @@ async function queryAssistant(req, res) {
       ? { reply: clarificationQuestion, audioNeeded: true }
       : await generateResponse(message, queryResult, contextDocs.join("\n"));
 
-    return res.status(200).json({
+    return sendSuccess(res, {
       intent,
       queryResult,
       contextDocs,
@@ -115,7 +106,7 @@ async function queryAssistant(req, res) {
       audioNeeded: true,
       needsClarification: isUnknown,
       clarificationQuestion,
-    });
+    }, "Assistant response generated");
   } catch (error) {
     console.error("Assistant query failed", {
       message: error.message,
@@ -123,11 +114,8 @@ async function queryAssistant(req, res) {
       stack: error.stack,
     });
 
-    return res.status(500).json({
-      error: {
-        message: "Something went wrong",
-        code: "ASSISTANT_QUERY_FAILED",
-      },
+    return sendError(res, "Something went wrong", 500, {
+      code: "ASSISTANT_QUERY_FAILED",
     });
   }
 }

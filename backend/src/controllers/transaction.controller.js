@@ -1,11 +1,12 @@
 const mongoose = require("mongoose");
 const User = require("../models/user.model");
-const { processTransactionText } = require("../services/extraction.service");
+const { extractWithLLM } = require("../services/llm-extraction.service");
 const {
   saveProcessedTransaction,
   saveRawLog,
   listTransactions,
 } = require("../services/transaction.store");
+const { sendSuccess, sendError } = require("../utils/apiResponse");
 
 function normalizeObjectId(value) {
   if (typeof value !== "string" || !value.trim()) {
@@ -65,35 +66,95 @@ async function resolveBusinessScope(userId) {
   };
 }
 
+function normalizeParserSource(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "rules" || normalized === "fallback") {
+    return normalized;
+  }
+  return "llm";
+}
+
+/**
+ * Convert LLM extraction output to transaction format
+ */
+function convertLLMToTransactionFormat(llmResult) {
+  const sales = [];
+  const expenses = [];
+
+  for (const transaction of llmResult.transactions || []) {
+    if (transaction.type === "sale") {
+      sales.push({
+        item: transaction.item,
+        qty: transaction.quantity || null,
+        price: transaction.price_per_unit || null,
+        total: transaction.total || null
+      });
+    } else if (transaction.type === "expense") {
+      expenses.push({
+        item: transaction.item,
+        amount: transaction.total || null,
+        qty: transaction.quantity || null,
+        price: transaction.price_per_unit || null
+      });
+    }
+  }
+
+  return { sales, expenses };
+}
+
 async function processText(req, res, next) {
   try {
     const { text, userId, businessId, save = true } = req.body || {};
 
     if (typeof text !== "string" || !text.trim()) {
-      return res.status(400).json({
-        error: {
-          message: "text is required",
-          code: "INVALID_TEXT",
-        },
+      return sendError(res, "text is required", 400, { code: "INVALID_TEXT" });
+    }
+
+    // Use LLM-first extraction
+    let llmResult;
+    try {
+      llmResult = await extractWithLLM(text);
+    } catch (error) {
+      console.error("[PROCESSTEXT] LLM extraction failed:", error.message);
+      return sendError(res, `Extraction failed: ${error.message}`, 500, {
+        code: "EXTRACTION_FAILED",
+        details: error.message
       });
     }
 
-    const { normalizedText, result } = await processTransactionText(text);
+    // Convert LLM output to transaction format
+    const { sales, expenses } = convertLLMToTransactionFormat(llmResult);
 
-    const rawLogPayload = {
-      text,
-      normalizedText,
-      source: "api",
-      status: result.meta.needs_clarification ? "clarification" : "processed",
-      parseMeta: {
-        confidence: result.meta.confidence,
-        parserSource: result.meta.source,
-        needsClarification: result.meta.needs_clarification,
-        clarificationQuestion: result.meta.clarification_question,
-      },
+    // Prepare response
+    const result = {
+      transactions: llmResult.transactions,
+      sales,
+      expenses,
+      meta: {
+        source: llmResult.model || "llm",
+        confidence: llmResult.confidence,
+        needs_clarification: llmResult.needs_clarification,
+        clarification_question: llmResult.clarification_question,
+        language: llmResult.language
+      }
     };
 
+    // Save to database if requested
     if (save !== false) {
+      const rawLogPayload = {
+        text,
+        normalizedText: text, // LLM-first doesn't need normalization
+        source: "api",
+        status: llmResult.needs_clarification ? "clarification_needed" : "processed",
+        parseMeta: {
+          confidence: llmResult.confidence,
+          parserSource: normalizeParserSource(llmResult.model),
+          needsClarification: llmResult.needs_clarification,
+          clarificationQuestion: llmResult.clarification_question,
+          language: llmResult.language
+        }
+      };
+
       const rawLog = await saveRawLog(rawLogPayload);
       const resolvedIds = await resolveUserAndBusinessIds(userId, businessId);
 
@@ -101,20 +162,21 @@ async function processText(req, res, next) {
         ...(resolvedIds.userId ? { userId: resolvedIds.userId } : {}),
         ...(resolvedIds.businessId ? { businessId: resolvedIds.businessId } : {}),
         rawText: text,
-        normalizedText,
+        normalizedText: text,
         rawLogId: rawLog?._id || null,
-        sales: result.sales,
-        expenses: result.expenses,
+        sales,
+        expenses,
         meta: {
-          confidence: result.meta.confidence,
-          source: result.meta.source,
-          needsClarification: result.meta.needs_clarification,
-          clarificationQuestion: result.meta.clarification_question,
-        },
+          confidence: llmResult.confidence,
+          source: normalizeParserSource(llmResult.model),
+          needsClarification: llmResult.needs_clarification,
+          clarificationQuestion: llmResult.clarification_question,
+          language: llmResult.language
+        }
       });
     }
 
-    return res.status(200).json(result);
+    return sendSuccess(res, result, "Transaction extracted successfully");
   } catch (error) {
     next(error);
   }
@@ -199,10 +261,10 @@ async function listHistory(req, res, next) {
         },
       }));
 
-    return res.status(200).json({
+    return sendSuccess(res, {
       count: filtered.length,
       transactions: filtered,
-    });
+    }, "Transaction history fetched");
   } catch (error) {
     next(error);
   }
@@ -215,11 +277,11 @@ async function saveTransaction(req, res, next) {
     const rawLogPayload = {
       text: rawText,
       normalizedText,
-      source: "client-save",
+      source: "api",
       status: "processed",
       parseMeta: {
         confidence: meta?.confidence || 0.9,
-        parserSource: meta?.source || "llm",
+        parserSource: normalizeParserSource(meta?.source),
         needsClarification: false,
         clarificationQuestion: null,
       },
@@ -238,13 +300,13 @@ async function saveTransaction(req, res, next) {
       expenses: expenses || [],
       meta: {
         confidence: meta?.confidence || 0.9,
-        source: meta?.source || "llm",
+        source: normalizeParserSource(meta?.source),
         needsClarification: false,
         clarificationQuestion: null,
       },
     });
 
-    return res.status(201).json(entry);
+    return sendSuccess(res, entry, "Transaction saved", 201);
   } catch (error) {
     next(error);
   }

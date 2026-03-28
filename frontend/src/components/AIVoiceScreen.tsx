@@ -42,6 +42,82 @@ function buildStructuredSummary(structuredData: ConversationStructuredData | nul
     .join(' | ')
 }
 
+function getConfidenceMeta(confidence: number | null): { percent: number; color: string; track: string; label: 'high' | 'medium' | 'low' } {
+  const value = typeof confidence === 'number' ? Math.max(0, Math.min(1, confidence)) : 0
+  const percent = Math.round(value * 100)
+
+  if (value >= 0.8) {
+    return { percent, color: 'text-emerald-700', track: 'bg-emerald-500', label: 'high' }
+  }
+  if (value >= 0.6) {
+    return { percent, color: 'text-amber-700', track: 'bg-amber-500', label: 'medium' }
+  }
+  return { percent, color: 'text-rose-700', track: 'bg-rose-500', label: 'low' }
+}
+
+/**
+ * ADDED: Show extracted transaction data with confidence
+ */
+function renderExtractedData(structuredData: ConversationStructuredData | null, confidence: number | null, language: 'EN' | 'HI'): React.ReactNode {
+  if (!structuredData) {
+    return null
+  }
+
+  const confidenceMeta = getConfidenceMeta(confidence)
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200"
+    >
+      <div className="flex justify-between items-start mb-2">
+        <h3 className="font-semibold text-gray-900">
+          {language === 'EN' ? 'Extracted Data' : 'निकाले गए डेटा'}
+        </h3>
+        <span className={`text-sm font-bold ${confidenceMeta.color}`}>
+          {language === 'EN' ? 'Confidence: ' : 'विश्वास: '}{confidenceMeta.percent}%
+        </span>
+      </div>
+      <div className="w-full h-2 rounded-full bg-gray-200 mb-3 overflow-hidden">
+        <div className={`h-full ${confidenceMeta.track}`} style={{ width: `${confidenceMeta.percent}%` }} />
+      </div>
+
+      {(structuredData.sales || []).length > 0 && (
+        <div className="mb-3">
+          <p className="text-xs font-semibold text-gray-600 mb-2">
+            {language === 'EN' ? 'Sales:' : 'बिक्री:'}
+          </p>
+          {structuredData.sales.map((sale, idx) => (
+            <div key={idx} className="text-sm text-gray-700 ml-2 mb-1">
+              • {sale.qty}x <span className="font-medium">{sale.item}</span> @ ₹{sale.price} each
+            </div>
+          ))}
+        </div>
+      )}
+
+      {(structuredData.expenses || []).length > 0 && (
+        <div className="mb-3">
+          <p className="text-xs font-semibold text-gray-600 mb-2">
+            {language === 'EN' ? 'Expenses:' : 'खर्च:'}
+          </p>
+          {structuredData.expenses.map((expense, idx) => (
+            <div key={idx} className="text-sm text-gray-700 ml-2 mb-1">
+              • <span className="font-medium">{expense.item}</span>: ₹{expense.amount}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {confidenceMeta.label === 'low' && (
+        <p className="text-xs text-amber-600 mt-2 p-2 bg-amber-50 rounded">
+          ⚠️ {language === 'EN' ? 'Low confidence. Please confirm or clarify.' : 'कम विश्वास। कृपया पुष्टि करें या स्पष्ट करें।'}
+        </p>
+      )}
+    </motion.div>
+  )
+}
+
 function highlightNumbers(text: string): React.ReactNode {
   return text
     .split(/(\d+(?:\.\d+)?)/g)
@@ -112,6 +188,18 @@ export const AIVoiceScreen: React.FC<AIVoiceScreenProps> = ({ userId, userName, 
       setAssistantReply(result.assistant.reply)
       setStructuredSummary(buildStructuredSummary(result.structured_data, language))
       setShouldStartNew(false)
+
+      if (result.conversation_state.saved_to_history) {
+        window.dispatchEvent(
+          new CustomEvent('voicetrack:transaction-saved', {
+            detail: {
+              userId: userId || 'guest-user',
+              transcript: result.transcript,
+              finalized: result.conversation_state.finalized,
+            },
+          })
+        )
+      }
 
       if (result.assistant.audio_needed && result.assistant.audio_url) {
         playAssistantReply(result.assistant.audio_url)
@@ -207,6 +295,26 @@ export const AIVoiceScreen: React.FC<AIVoiceScreenProps> = ({ userId, userName, 
         <p className="text-[#1A1A1A]/60 text-lg">
           {language === 'EN' ? 'record a voice transaction and I will guide the rest.' : 'वॉइस ट्रांजैक्शन रिकॉर्ड करें, बाकी मैं संभाल लूँगा।'}
         </p>
+        <div className="mt-3 flex flex-wrap justify-center gap-2 text-xs">
+          <span className={`px-3 py-1 rounded-full border ${isProcessing ? 'bg-amber-50 border-amber-200 text-amber-700' : 'bg-white/60 border-white/70 text-[#1A1A1A]/65'}`}>
+            {isProcessing
+              ? (language === 'EN' ? 'Processing' : 'प्रोसेस हो रहा है')
+              : (language === 'EN' ? 'Ready' : 'तैयार')}
+          </span>
+          <span className={`px-3 py-1 rounded-full border ${isListening ? 'bg-rose-50 border-rose-200 text-rose-700' : 'bg-white/60 border-white/70 text-[#1A1A1A]/65'}`}>
+            {isListening
+              ? (language === 'EN' ? 'Listening' : 'सुन रहा है')
+              : (language === 'EN' ? 'Mic idle' : 'माइक निष्क्रिय')}
+          </span>
+          <span className={`px-3 py-1 rounded-full border ${(conversationResult?.conversation_state?.clarification_pending || conversationResult?.conversation_state?.requires_confirmation)
+            ? 'bg-amber-50 border-amber-200 text-amber-700'
+            : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+            }`}>
+            {(conversationResult?.conversation_state?.clarification_pending || conversationResult?.conversation_state?.requires_confirmation)
+              ? (language === 'EN' ? 'Needs confirmation' : 'पुष्टि आवश्यक')
+              : (language === 'EN' ? 'Understood' : 'समझ लिया गया')}
+          </span>
+        </div>
       </div>
 
       <div className="px-6 z-20">
@@ -244,15 +352,30 @@ export const AIVoiceScreen: React.FC<AIVoiceScreenProps> = ({ userId, userName, 
             </div>
           )}
 
-          <div className="rounded-2xl bg-[#161211] text-[#F8F5F2] px-4 py-3 text-sm">
-            <p className="font-semibold mb-1">{language === 'EN' ? 'Assistant reply' : 'सहायक का जवाब'}</p>
-            <p>{assistantReply || (language === 'EN' ? 'Your spoken reply will appear here.' : 'आपके लिए बोला गया जवाब यहाँ दिखेगा।')}</p>
+          <div className="rounded-2xl bg-[#161211] text-[#F8F5F2] px-4 py-3 text-sm border border-white/10">
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <p className="font-semibold">{language === 'EN' ? 'Assistant reply' : 'सहायक का जवाब'}</p>
+              <span className="text-[10px] uppercase tracking-wide text-white/60">
+                {conversationResult?.assistant?.audio_needed
+                  ? (language === 'EN' ? 'Voice ready' : 'आवाज़ तैयार')
+                  : (language === 'EN' ? 'Text mode' : 'टेक्स्ट मोड')}
+              </span>
+            </div>
+            <p className="leading-relaxed">{assistantReply || (language === 'EN' ? 'Your spoken reply will appear here.' : 'आपके लिए बोला गया जवाब यहाँ दिखेगा।')}</p>
           </div>
 
           <div className="rounded-2xl bg-white/50 border border-white/50 px-4 py-3 text-sm text-[#1A1A1A]/80">
             <p className="font-semibold mb-1">{language === 'EN' ? 'Structured result' : 'स्ट्रक्चर्ड रिज़ल्ट'}</p>
             <p>{structuredSummary || (language === 'EN' ? 'Waiting for parsed transaction data.' : 'पार्स किए गए ट्रांजैक्शन डेटा का इंतज़ार है।')}</p>
           </div>
+
+          {/* ADDED: Show detailed extracted data with confidence */}
+          {renderExtractedData(
+            conversationResult?.structured_data || null,
+            conversationResult?.stt.processing?.extraction_confidence ||
+            conversationResult?.stt.confidence || null,
+            language
+          )}
 
           {conversationResult && (
             <div className="text-xs text-[#1A1A1A]/65 space-y-1">
@@ -344,11 +467,10 @@ export const AIVoiceScreen: React.FC<AIVoiceScreenProps> = ({ userId, userName, 
             transition={isListening ? { repeat: Infinity, duration: 1.5 } : {}}
             onClick={isProcessing ? undefined : (isListening ? () => void stopVoiceInput() : () => void startVoiceInput())}
             disabled={isProcessing}
-            className={`w-16 h-16 rounded-full flex items-center justify-center transition-colors ${
-              isProcessing
-                ? 'bg-[#1A1A1A] cursor-not-allowed border border-white/20'
-                : 'bg-[#F85F54] cursor-pointer shadow-[0_0_20px_rgba(248,95,84,0.4)]'
-            }`}
+            className={`w-16 h-16 rounded-full flex items-center justify-center transition-colors ${isProcessing
+              ? 'bg-[#1A1A1A] cursor-not-allowed border border-white/20'
+              : 'bg-[#F85F54] cursor-pointer shadow-[0_0_20px_rgba(248,95,84,0.4)]'
+              }`}
           >
             {isProcessing ? (
               <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -359,6 +481,13 @@ export const AIVoiceScreen: React.FC<AIVoiceScreenProps> = ({ userId, userName, 
             )}
           </motion.button>
         </div>
+        <p className="mt-3 text-center text-xs text-[#1A1A1A]/65 font-medium">
+          {isProcessing
+            ? (language === 'EN' ? 'Analyzing your voice note...' : 'आपका वॉइस नोट विश्लेषित हो रहा है...')
+            : isListening
+              ? (language === 'EN' ? 'Tap to stop recording' : 'रिकॉर्डिंग रोकने के लिए टैप करें')
+              : (language === 'EN' ? 'Tap mic and speak naturally' : 'माइक दबाकर सामान्य रूप से बोलें')}
+        </p>
       </div>
     </motion.div>
   )

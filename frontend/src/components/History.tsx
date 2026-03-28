@@ -17,37 +17,33 @@ export const History: React.FC<HistoryProps> = ({ userId, onToggleSidebar, langu
   const [records, setRecords] = useState<HistoryEntry[]>([])
   const [isLoading, setIsLoading] = useState(false)
 
-  React.useEffect(() => {
-    let mounted = true
-
-    const loadHistory = async () => {
-      setIsLoading(true)
-      try {
-        const response = await getTransactionHistory({
-          userId: userId || undefined,
-          limit: 200,
-        })
-
-        if (mounted) {
-          setRecords(response.transactions)
-        }
-      } catch {
-        if (mounted) {
-          setRecords([])
-        }
-      } finally {
-        if (mounted) {
-          setIsLoading(false)
-        }
-      }
-    }
-
-    loadHistory()
-
-    return () => {
-      mounted = false
+  const loadHistory = React.useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const response = await getTransactionHistory({
+        userId: userId || undefined,
+        limit: 200,
+      })
+      setRecords(response.transactions)
+    } catch {
+      setRecords([])
+    } finally {
+      setIsLoading(false)
     }
   }, [userId])
+
+  React.useEffect(() => {
+    void loadHistory()
+
+    const onTransactionSaved = () => {
+      void loadHistory()
+    }
+    window.addEventListener('voicetrack:transaction-saved', onTransactionSaved)
+
+    return () => {
+      window.removeEventListener('voicetrack:transaction-saved', onTransactionSaved)
+    }
+  }, [loadHistory])
 
   const filteredData = useMemo(() => {
     const now = new Date()
@@ -97,7 +93,7 @@ export const History: React.FC<HistoryProps> = ({ userId, onToggleSidebar, langu
     >
       <div className="px-6 pt-12 pb-2 flex flex-col items-start justify-between z-10 w-full">
         <div className="w-full flex justify-between items-center mb-6">
-          <button 
+          <button
             onClick={onToggleSidebar}
             className="w-10 h-10 bg-white bg-opacity-60 rounded-full flex items-center justify-center hover:bg-opacity-100 transition-colors shadow-sm"
           >
@@ -130,11 +126,10 @@ export const History: React.FC<HistoryProps> = ({ userId, onToggleSidebar, langu
               <button
                 key={period}
                 onClick={() => setActivePeriod(period)}
-                className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-bold transition-all shadow-sm ${
-                  activePeriod === period 
-                    ? 'bg-[#1A1A1A] text-[#F8F5F2]' 
+                className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-bold transition-all shadow-sm ${activePeriod === period
+                    ? 'bg-[#1A1A1A] text-[#F8F5F2]'
                     : 'bg-white/40 text-[#1A1A1A]/60 hover:bg-white/80'
-                }`}
+                  }`}
               >
                 {language === 'EN' ? period : labelMap[period]}
               </button>
@@ -145,7 +140,7 @@ export const History: React.FC<HistoryProps> = ({ userId, onToggleSidebar, langu
         {/* Custom Date Range Inputs */}
         <AnimatePresence>
           {activePeriod === 'Custom' && (
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
@@ -155,8 +150,8 @@ export const History: React.FC<HistoryProps> = ({ userId, onToggleSidebar, langu
                 <label className="text-xs font-bold text-[#1A1A1A]/60 uppercase ml-1 block mb-1">
                   {language === 'EN' ? 'From' : 'से'}
                 </label>
-                <input 
-                  type="date" 
+                <input
+                  type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
                   className="w-full bg-white/50 border border-white/40 rounded-xl px-3 py-2 text-sm font-medium text-[#1A1A1A] outline-none"
@@ -166,8 +161,8 @@ export const History: React.FC<HistoryProps> = ({ userId, onToggleSidebar, langu
                 <label className="text-xs font-bold text-[#1A1A1A]/60 uppercase ml-1 block mb-1">
                   {language === 'EN' ? 'To' : 'तक'}
                 </label>
-                <input 
-                  type="date" 
+                <input
+                  type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
                   className="w-full bg-white/50 border border-white/40 rounded-xl px-3 py-2 text-sm font-medium text-[#1A1A1A] outline-none"
@@ -193,15 +188,15 @@ export const History: React.FC<HistoryProps> = ({ userId, onToggleSidebar, langu
                 {language === 'EN' ? 'Loading records...' : 'रिकॉर्ड लोड हो रहे हैं...'}
               </motion.div>
             ) : filteredData.length === 0 ? (
-               <motion.div 
-                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                 className="text-center py-10 opacity-60 text-sm font-medium"
-               >
-                 {language === 'EN' ? `No records for ${activePeriod.toLowerCase()}` : 'कोई रिकॉर्ड नहीं मिला'}
-               </motion.div>
+              <motion.div
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="text-center py-10 opacity-60 text-sm font-medium"
+              >
+                {language === 'EN' ? `No records for ${activePeriod.toLowerCase()}` : 'कोई रिकॉर्ड नहीं मिला'}
+              </motion.div>
             ) : (
               filteredData.map((item, idx) => (
-                <motion.div 
+                <motion.div
                   layout
                   key={item.id || String(idx)}
                   initial={{ opacity: 0, scale: 0.95, y: 10 }}

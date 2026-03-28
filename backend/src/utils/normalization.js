@@ -1,4 +1,8 @@
 const { FILLER_WORDS, ITEM_MAPPINGS, NUMBER_WORDS } = require("../constants");
+const {
+  isHindiContent,
+  normalizeHindiText,
+} = require("../services/hindi-normalization.service");
 
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -11,18 +15,33 @@ function replaceWholeWords(text, replacements) {
   }, text);
 }
 
+/**
+ * FIXED: Preprocessing now includes Hindi normalization
+ */
 function preprocessText(text) {
   let normalized = String(text || "").toLowerCase().trim();
 
-  normalized = replaceWholeWords(normalized, NUMBER_WORDS);
-  normalized = replaceWholeWords(normalized, ITEM_MAPPINGS);
-  normalized = normalized.replace(/\b(rs|rupaye|rupees?)\b|₹|रुपये|रुपया|रू|rs\.?/g, " ");
+  // Step 1: If Hindi content detected, use dedicated Hindi normalization
+  if (isHindiContent(text)) {
+    normalized = normalizeHindiText(text);
+  } else {
+    // Step 2: Replace number words (Hinglish/English)
+    normalized = replaceWholeWords(normalized, NUMBER_WORDS);
 
+    // Step 3: Replace item mappings
+    normalized = replaceWholeWords(normalized, ITEM_MAPPINGS);
+  }
+
+  // Remove currency markers
+  normalized = normalized.replace(/\b(rs|rupaye|रुपये|रुपया|rupee)\b|₹/g, " ");
+
+  // Remove filler words
   for (const filler of FILLER_WORDS) {
     const pattern = new RegExp(`\\b${escapeRegExp(filler)}\\b`, "g");
     normalized = normalized.replace(pattern, " ");
   }
 
+  // Clean up multi-spaces and trim
   normalized = normalized.replace(/\s+/g, " ").trim();
   return normalized;
 }

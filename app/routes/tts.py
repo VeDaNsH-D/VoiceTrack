@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from app.services.tts_service import text_to_speech
+from app.utils.api_response import success_response
 from app.utils.config import TEMP_AUDIO_DIR
 from app.utils.logger import logger
 
@@ -31,7 +32,8 @@ async def tts(request: TTSRequest, http_request: Request):
     if not audio_path:
         raise HTTPException(status_code=500, detail="TTS generation failed")
 
-    return {"audioUrl": f"/audio/{os.path.basename(audio_path)}"}
+    return success_response({"audioUrl": f"/audio/{os.path.basename(audio_path)}"}, "TTS generated")
+
 
 @router.get("/audio/{filename}", name="get_generated_audio")
 def get_generated_audio(filename: str):
