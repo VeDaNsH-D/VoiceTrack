@@ -10,7 +10,7 @@ const API_BASE = (
 const VOICE_API_BASE = (
   import.meta.env.VITE_VOICE_API_BASE_URL?.trim() ||
   import.meta.env.VITE_PYTHON_SERVICE_URL?.trim() ||
-  'http://localhost:8001'
+  'http://localhost:8000'
 ).replace(/\/$/, '')
 
 const buildNgrokHeaders = (baseUrl: string): Record<string, string> => {
@@ -815,7 +815,9 @@ export async function processVoiceNarration(payload: {
   const formData = new FormData()
 
   if (payload.audioBlob) {
-    formData.append('audio', payload.audioBlob, 'voice-note.webm')
+    const mimeType = String(payload.audioBlob.type || '').toLowerCase()
+    const extension = mimeType.includes('wav') ? 'wav' : mimeType.includes('mp3') ? 'mp3' : 'webm'
+    formData.append('audio', payload.audioBlob, `voice-note.${extension}`)
   }
 
   if (payload.transcript) {
@@ -838,18 +840,30 @@ export async function processVoiceNarration(payload: {
     formData.append('forceSave', String(payload.forceSave))
   }
 
-  const response = await apiClient.post<ApiEnvelope<VoiceNarrationResult> | VoiceNarrationResult>(
-    '/api/voice/process',
-    formData,
-    {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      timeout: 180000,
-    }
-  )
+  let raw: any
+  try {
+    const response = await apiClient.post<ApiEnvelope<VoiceNarrationResult> | VoiceNarrationResult>(
+      '/api/voice/process',
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 180000,
+      }
+    )
+    raw = unwrapApiResponse<any>(response.data)
+  } catch (error: any) {
+    const payload = error?.response?.data
+    const serverMessage = String(
+      payload?.message ||
+      payload?.error?.message ||
+      payload?.data?.message ||
+      ''
+    ).trim()
 
-  const raw = unwrapApiResponse<any>(response.data)
+    throw new Error(serverMessage || 'Could not process voice narration.')
+  }
 
   const normalizedStatus = String(
     raw?.status ||

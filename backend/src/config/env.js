@@ -37,7 +37,7 @@ module.exports = {
   pythonServiceUrl:
     process.env.PYTHON_SERVICE_URL ||
     process.env.TTS_BASE_URL ||
-    "http://127.0.0.1:8001",
+    "http://127.0.0.1:8000",
   sttPath: process.env.STT_PATH || "/stt",
   ttsPath: process.env.TTS_PATH || "/tts",
   ttsTimeoutMs: Number(process.env.TTS_TIMEOUT_MS || 10000),

@@ -24,6 +24,7 @@ const escapeCsvValue = (value: string | number) => {
 export const HistoryLedger: React.FC<HistoryLedgerProps> = ({ userId, businessId, onToggleSidebar, language }) => {
     const [activePeriod, setActivePeriod] = useState<Period>('Today')
     const [searchTerm, setSearchTerm] = useState('')
+    const [selectedDate, setSelectedDate] = useState('')
     const [records, setRecords] = useState<HistoryEntry[]>([])
     const [isLoading, setIsLoading] = useState(false)
 
@@ -33,7 +34,7 @@ export const HistoryLedger: React.FC<HistoryLedgerProps> = ({ userId, businessId
             const response = await getTransactionHistory({
                 userId: userId || undefined,
                 businessId: businessId || undefined,
-                limit: 200,
+                limit: 1000,
             })
             setRecords(response.transactions)
         } catch {
@@ -58,31 +59,37 @@ export const HistoryLedger: React.FC<HistoryLedgerProps> = ({ userId, businessId
 
     const periodFilteredData = useMemo(() => {
         const now = new Date()
-        const todayStart = new Date(now)
-        todayStart.setHours(0, 0, 0, 0)
-        const weekStart = new Date(now)
-        weekStart.setDate(now.getDate() - 7)
-        weekStart.setHours(0, 0, 0, 0)
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+        const dayEnd = new Date(now)
+        dayEnd.setHours(23, 59, 59, 999)
 
-        return records.filter((item) => {
-            const createdAt = new Date(item.createdAt)
+        let rangeStart = new Date(now)
+        let rangeEnd = dayEnd
 
-            if (activePeriod === 'Today') {
-                return createdAt >= todayStart
+        if (selectedDate) {
+            const customStart = new Date(`${selectedDate}T00:00:00`)
+            const customEnd = new Date(`${selectedDate}T23:59:59.999`)
+            if (!Number.isNaN(customStart.getTime()) && !Number.isNaN(customEnd.getTime())) {
+                rangeStart = customStart
+                rangeEnd = customEnd
             }
+        } else if (activePeriod === 'Today') {
+            rangeStart.setHours(0, 0, 0, 0)
+        } else if (activePeriod === 'This Week') {
+            rangeStart.setDate(now.getDate() - 6)
+            rangeStart.setHours(0, 0, 0, 0)
+        } else {
+            rangeStart = new Date(now.getFullYear(), now.getMonth(), 1)
+            rangeStart.setHours(0, 0, 0, 0)
+        }
 
-            if (activePeriod === 'This Week') {
-                return createdAt >= weekStart
+        return records.filter((entry) => {
+            const createdAt = new Date(entry.createdAt)
+            if (Number.isNaN(createdAt.getTime())) {
+                return false
             }
-
-            if (activePeriod === 'This Month') {
-                return createdAt >= monthStart
-            }
-
-            return true
+            return createdAt >= rangeStart && createdAt <= rangeEnd
         })
-    }, [records, activePeriod])
+    }, [records, activePeriod, selectedDate])
 
     const filteredData = useMemo(() => {
         const normalizedSearch = searchTerm.trim().toLowerCase()
@@ -219,7 +226,10 @@ export const HistoryLedger: React.FC<HistoryLedgerProps> = ({ userId, businessId
                         {(['Today', 'This Week', 'This Month'] as Period[]).map((period) => (
                             <button
                                 key={period}
-                                onClick={() => setActivePeriod(period)}
+                                onClick={() => {
+                                    setActivePeriod(period)
+                                    setSelectedDate('')
+                                }}
                                 className={`rounded-full px-4 py-2 text-sm font-medium transition ${activePeriod === period
                                     ? 'bg-slate-900 text-white'
                                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -229,7 +239,16 @@ export const HistoryLedger: React.FC<HistoryLedgerProps> = ({ userId, businessId
                             </button>
                         ))}
 
-                        <div className="ml-auto w-full max-w-sm">
+                        <div className="ml-auto w-full max-w-xs">
+                            <input
+                                type="date"
+                                value={selectedDate}
+                                onChange={(event) => setSelectedDate(event.target.value)}
+                                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-slate-400"
+                            />
+                        </div>
+
+                        <div className="w-full max-w-sm">
                             <input
                                 value={searchTerm}
                                 onChange={(event) => setSearchTerm(event.target.value)}
@@ -237,6 +256,16 @@ export const HistoryLedger: React.FC<HistoryLedgerProps> = ({ userId, businessId
                                 className="w-full rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-700 outline-none transition focus:border-slate-400"
                             />
                         </div>
+
+                        {selectedDate && (
+                            <button
+                                type="button"
+                                onClick={() => setSelectedDate('')}
+                                className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+                            >
+                                {language === 'EN' ? 'Clear Date' : 'तारीख हटाएँ'}
+                            </button>
+                        )}
                     </div>
                 </div>
 

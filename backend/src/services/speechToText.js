@@ -5,7 +5,7 @@ const env = require("../config/env");
 const MAX_AUDIO_BYTES = Number(process.env.VOICE_MAX_AUDIO_BYTES || 25 * 1024 * 1024);
 
 function buildSttUrl() {
-  const base = String(env.pythonServiceUrl || process.env.PYTHON_SERVICE_URL || "http://127.0.0.1:8001").replace(/\/$/, "");
+  const base = String(env.pythonServiceUrl || process.env.PYTHON_SERVICE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
   const path = String(env.sttPath || process.env.STT_PATH || "/stt");
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return `${base}${normalizedPath}`;

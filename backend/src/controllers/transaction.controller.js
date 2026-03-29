@@ -187,7 +187,7 @@ async function listHistory(req, res, next) {
     const { userId, businessId, startDate, endDate } = req.query || {};
     const parsedLimit = Number(req.query?.limit || 50);
     const limit = Number.isFinite(parsedLimit)
-      ? Math.min(Math.max(parsedLimit, 1), 200)
+      ? Math.min(Math.max(parsedLimit, 1), 1000)
       : 50;
 
     const allTransactions = await listTransactions();
@@ -238,49 +238,33 @@ async function listHistory(req, res, next) {
     const sortByRecent = (left, right) =>
       new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime();
 
-    let scopedEntries = allTransactions.filter((entry) => {
+    const entryMatchesScope = (entry) => {
       const entryBusinessId = entry.businessId
         ? String(entry.businessId._id || entry.businessId)
         : "";
+      const entryUserId = entry.userId
+        ? String(entry.userId._id || entry.userId)
+        : "";
 
-      if (!scopedBusinessId) {
-        return false;
+      if (scopedBusinessId && scopedUserId) {
+        // Include business-wide entries plus legacy user-only entries.
+        return entryBusinessId === scopedBusinessId || entryUserId === scopedUserId;
       }
 
-      return entryBusinessId === scopedBusinessId && matchesDateRange(entry);
-    });
+      if (scopedBusinessId) {
+        return entryBusinessId === scopedBusinessId;
+      }
 
-    if (!scopedBusinessId && !scopedUserId) {
-      scopedEntries = allTransactions.filter(matchesDateRange);
-    }
+      if (scopedUserId) {
+        return entryUserId === scopedUserId;
+      }
 
-    if (!scopedEntries.length && scopedUserId) {
-      scopedEntries = allTransactions.filter((entry) => {
-        const entryUserId = entry.userId
-          ? String(entry.userId._id || entry.userId)
-          : "";
+      return true;
+    };
 
-        if (!entryUserId) {
-          return false;
-        }
-
-        return entryUserId === scopedUserId && matchesDateRange(entry);
-      });
-    }
-
-    if (!scopedBusinessId && scopedUserId && !scopedEntries.length) {
-      scopedEntries = allTransactions.filter((entry) => {
-        const entryUserId = entry.userId
-          ? String(entry.userId._id || entry.userId)
-          : "";
-
-        if (!entryUserId) {
-          return false;
-        }
-
-        return entryUserId === scopedUserId && matchesDateRange(entry);
-      });
-    }
+    const scopedEntries = allTransactions.filter(
+      (entry) => entryMatchesScope(entry) && matchesDateRange(entry)
+    );
 
     const filtered = scopedEntries
       .sort(sortByRecent)
