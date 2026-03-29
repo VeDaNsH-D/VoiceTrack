@@ -13,17 +13,28 @@ const VOICE_API_BASE = (
   'http://localhost:8001'
 ).replace(/\/$/, '')
 
+const buildNgrokHeaders = (baseUrl: string): Record<string, string> => {
+  if (baseUrl.includes('ngrok-free.app') || baseUrl.includes('ngrok-free.dev')) {
+    return { 'ngrok-skip-browser-warning': 'true' }
+  }
+  return {}
+}
+
 const apiClient = axios.create({
   baseURL: API_BASE,
   timeout: 60000,
   headers: {
     'Content-Type': 'application/json',
+    ...buildNgrokHeaders(API_BASE),
   },
 })
 
 const voiceApiClient = axios.create({
   baseURL: VOICE_API_BASE,
   timeout: 120000,
+  headers: {
+    ...buildNgrokHeaders(VOICE_API_BASE),
+  },
 })
 
 export interface AuthUser {

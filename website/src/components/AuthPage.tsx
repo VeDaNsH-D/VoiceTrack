@@ -3,6 +3,16 @@ import { motion, AnimatePresence } from 'framer-motion'
 import axios from 'axios'
 import { FiArrowLeft, FiArrowRight, FiEye, FiEyeOff } from 'react-icons/fi'
 
+const API_BASE = (
+  import.meta.env.VITE_API_BASE_URL?.trim() ||
+  import.meta.env.VITE_BACKEND_URL?.trim() ||
+  'http://localhost:5001'
+).replace(/\/$/, '')
+
+const API_HEADERS = API_BASE.includes('ngrok-free.app') || API_BASE.includes('ngrok-free.dev')
+  ? { 'ngrok-skip-browser-warning': 'true' }
+  : undefined
+
 interface AuthPageProps {
   onBack: () => void
   onLogin: (session: any) => void
@@ -40,15 +50,21 @@ export function AuthPage({ onBack, onLogin }: AuthPageProps) {
     if (signupDisabled) return
     setIsLoading(true)
     try {
-      const { data } = await axios.post('/api/auth/signup', {
-        name: name.trim(),
-        phone: `+91${phone}`,
-        password: pwd,
-        businessMode: bizMode,
-        businessType: occ.trim().toLowerCase(),
-        ...(bizMode === 'join' ? { businessCode: bizCode.trim().toUpperCase() } : { businessName: `${name.trim()}'s Business` }),
-        businessPassword: bizPwd,
-      })
+      const { data } = await axios.post(
+        `${API_BASE}/api/auth/signup`,
+        {
+          name: name.trim(),
+          phone: `+91${phone}`,
+          password: pwd,
+          businessMode: bizMode,
+          businessType: occ.trim().toLowerCase(),
+          ...(bizMode === 'join' ? { businessCode: bizCode.trim().toUpperCase() } : { businessName: `${name.trim()}'s Business` }),
+          businessPassword: bizPwd,
+        },
+        {
+          headers: API_HEADERS,
+        }
+      )
       onLogin(data)
     } catch (err: unknown) {
       setError(axios.isAxiosError(err) ? (err.response?.data?.message || 'Signup failed.') : 'Something went wrong.')
@@ -62,7 +78,13 @@ export function AuthPage({ onBack, onLogin }: AuthPageProps) {
     setIsLoading(true)
     const identifier = /^\d{10}$/.test(loginId.trim()) ? `+91${loginId.trim()}` : loginId.trim()
     try {
-      const { data } = await axios.post('/api/auth/login', { identifier, password: loginPwd })
+      const { data } = await axios.post(
+        `${API_BASE}/api/auth/login`,
+        { identifier, password: loginPwd },
+        {
+          headers: API_HEADERS,
+        }
+      )
       onLogin(data)
     } catch (err: unknown) {
       setError(axios.isAxiosError(err) ? (err.response?.data?.message || 'Login failed.') : 'Something went wrong.')
