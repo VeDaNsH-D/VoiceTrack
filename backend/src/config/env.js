@@ -8,6 +8,7 @@ module.exports = {
   nodeEnv: process.env.NODE_ENV || "development",
   port: Number(process.env.PORT || 5000),
   mongoUri: process.env.MONGO_URI || "",
+  mongoSeedUri: process.env.MONGO_SEED_URI || "",
 
   // FIXED: Multi-model LLM support
   openaiApiKey: process.env.OPENAI_API_KEY || "",

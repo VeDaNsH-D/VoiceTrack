@@ -10,7 +10,7 @@ const API_BASE = (
 const VOICE_API_BASE = (
   import.meta.env.VITE_VOICE_API_BASE_URL?.trim() ||
   import.meta.env.VITE_PYTHON_SERVICE_URL?.trim() ||
-  'http://localhost:8000'
+  'http://localhost:8001'
 ).replace(/\/$/, '')
 
 const buildNgrokHeaders = (baseUrl: string): Record<string, string> => {

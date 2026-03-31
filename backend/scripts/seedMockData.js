@@ -3,16 +3,18 @@ const data = require("./mockData.json");
 const Transaction = require("../src/models/transaction.model");
 const env = require("../src/config/env");
 
-if (!env.mongoUri) {
+const seedUri = env.mongoSeedUri || env.mongoUri;
+
+if (!seedUri) {
     console.error(
-        "MONGO_URI is not set. Please add it to backend/.env before seeding data."
+        "MONGO_URI/MONGO_SEED_URI is not set. Please add it to backend/.env before seeding data."
     );
     process.exit(1);
 }
 
 async function seedMockData() {
     try {
-        await mongoose.connect(env.mongoUri);
+        await mongoose.connect(seedUri);
 
         if (!Array.isArray(data) || data.length === 0) {
             throw new Error("mockData.json is empty or invalid. Run generateMockData.js first.");

@@ -2,6 +2,7 @@
 
 const mongoose = require("mongoose");
 const connectDb = require("../src/config/db");
+const env = require("../src/config/env");
 const Transaction = require("../src/models/transaction.model");
 const User = require("../src/models/user.model");
 const Business = require("../src/models/business.model");
@@ -183,9 +184,9 @@ async function resolveTargetIds(userIdArg, businessIdArg) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
-  await connectDb();
+  await connectDb(env.mongoSeedUri || env.mongoUri);
   if (mongoose.connection.readyState !== 1) {
-    throw new Error("MongoDB is not connected. Ensure MONGO_URI is set and reachable.");
+    throw new Error("MongoDB is not connected. Ensure MONGO_URI or MONGO_SEED_URI is set and reachable.");
   }
 
   const { userId, businessId } = await resolveTargetIds(args.userId, args.businessId);

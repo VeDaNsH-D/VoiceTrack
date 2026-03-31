@@ -4,14 +4,16 @@ const logger = require("../utils/logger");
 
 let connectionPromise;
 
-async function connectDb() {
-  if (!env.mongoUri) {
+async function connectDb(uriOverride = "") {
+  const targetUri = uriOverride || env.mongoUri;
+
+  if (!targetUri) {
     logger.warn("MONGO_URI not set, skipping database connection");
     return null;
   }
 
   if (!connectionPromise) {
-    connectionPromise = mongoose.connect(env.mongoUri, {
+    connectionPromise = mongoose.connect(targetUri, {
       serverSelectionTimeoutMS: 5000,
     });
   }
