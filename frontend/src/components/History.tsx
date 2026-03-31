@@ -234,6 +234,25 @@ export const History: React.FC<HistoryProps> = ({ userId, onToggleSidebar, langu
                     <p className="text-[13.5px] font-semibold text-[#1A1A1A]/80 leading-relaxed">
                       {item.rawText}
                     </p>
+                    {/* Filecoin Audio Storage Info */}
+                    {item.audioStorage && (item.audioStorage.cid || item.audioStorage.gateway_url) && (
+                      <div className="mt-2 text-xs text-neutral bg-white/70 rounded p-2 border border-neutral border-opacity-10">
+                        {item.audioStorage.cid && (
+                          <div className="mb-1">
+                            <span className="font-semibold">Filecoin CID:</span>{' '}
+                            <span className="break-all">{item.audioStorage.cid}</span>
+                          </div>
+                        )}
+                        {item.audioStorage.gateway_url && (
+                          <div>
+                            <span className="font-semibold">Audio URL:</span>{' '}
+                            <a href={item.audioStorage.gateway_url} target="_blank" rel="noopener noreferrer" className="text-primary underline break-all">
+                              {item.audioStorage.gateway_url}
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </motion.div>
                 )
               })

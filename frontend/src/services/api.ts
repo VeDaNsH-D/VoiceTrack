@@ -128,6 +128,12 @@ export interface HistoryEntry {
     needsClarification?: boolean
     clarificationQuestion?: string | null
   } | null
+  audioStorage?: {
+    cid?: string | null
+    gateway_url?: string | null
+    storage_provider?: string | null
+    stored_at?: string | null
+  } | null
 }
 
 export interface HistoryResult {

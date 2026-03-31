@@ -5,14 +5,19 @@ import { FiCopy } from 'react-icons/fi'
 import { TranscriptionResult } from '../types'
 import { getConfidenceLabel } from '../utils/formatting'
 
+
 interface TranscriptionDisplayProps {
   result: TranscriptionResult
   audioBlob: Blob
+  cid?: string | null
+  gatewayUrl?: string | null
 }
 
 export const TranscriptionDisplay: React.FC<TranscriptionDisplayProps> = ({
   result,
   audioBlob,
+  cid,
+  gatewayUrl,
 }: TranscriptionDisplayProps) => {
   const [copied, setCopied] = useState(false)
   const [audioUrl, setAudioUrl] = useState<string>('')
@@ -89,11 +94,26 @@ export const TranscriptionDisplay: React.FC<TranscriptionDisplayProps> = ({
         </p>
       </div>
 
-      {/* Audio Playback */}
+
+      {/* Audio Playback & Filecoin Info */}
       <div>
         <p className="text-xs text-neutral mb-2 font-medium">🔊 Audio Playback</p>
-        <div className="flex items-center gap-3 bg-white rounded p-3 border border-neutral border-opacity-10">
+        <div className="flex flex-col gap-2 bg-white rounded p-3 border border-neutral border-opacity-10">
           <audio src={audioUrl} controls className="flex-1 h-10" />
+          {(cid || gatewayUrl) && (
+            <div className="mt-2 text-xs text-neutral">
+              {cid && (
+                <div className="mb-1">
+                  <span className="font-semibold">Filecoin CID:</span> <span className="break-all">{cid}</span>
+                </div>
+              )}
+              {gatewayUrl && (
+                <div>
+                  <span className="font-semibold">Audio URL:</span> <a href={gatewayUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline break-all">{gatewayUrl}</a>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
